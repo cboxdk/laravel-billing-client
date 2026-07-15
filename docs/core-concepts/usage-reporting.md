@@ -37,3 +37,26 @@ Reporting runs from the `billing:report-usage` command on your scheduler, at the
 `report_interval` cadence. A missed run is harmless for the same reason a dropped report
 is: the next run carries the full running total. Per-org faults are isolated — one
 unreachable org does not block reporting for the others.
+
+## Choosing a durable buffer
+
+The ledger is the crash-safety story: every committed unit is appended there **before**
+it is counted anywhere else, so a crash between append and report never loses it — but
+only if the buffer itself is durable.
+
+- `buffer => 'cache'` (default) keeps cumulative counters in the cache. Point it at a
+  **persistent** cache store; a volatile cache (an in-memory or LRU-evicting store) can
+  silently drop unreported usage on eviction or restart.
+- `buffer => 'database'` persists every append to a relational table
+  (`DatabaseUsageBuffer`), surviving eviction and restart. Publish and run the migration
+  first: `php artisan vendor:publish --tag=billing-client-migrations`.
+
+Either way the reporting contract is identical — cumulative and self-correcting — so the
+choice is purely about how durable "durable" needs to be.
+
+## Observing the meter
+
+The enforcement path emits `BillingSignals` — `allowed`, `denied`, `refilled`,
+`reported` — so a host can meter the meter. The default binding is a no-op; bind
+`LoggingBillingSignals` or your own metrics implementation to alert on denials or watch
+refill rates.

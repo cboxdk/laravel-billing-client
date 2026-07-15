@@ -32,4 +32,14 @@ readonly class Entitlements
 
         return $entitlement !== null && $entitlement->enabled;
     }
+
+    /**
+     * Weighted billable cost of `$units` raw units on `$meter`, applying the meter's
+     * entitlement weight. Deny-by-default: an unknown meter has no entitlement and
+     * therefore costs nothing here.
+     */
+    public function cost(string $meter, int $units): float
+    {
+        return $this->for($meter)?->cost($units) ?? 0.0;
+    }
 }

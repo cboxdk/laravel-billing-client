@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client\Reporting;
 
+use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\BillingTransport;
 use Cbox\Billing\Client\Contracts\UsageBuffer;
 use Cbox\Billing\Client\Exceptions\TransportException;
+use Cbox\Billing\Client\Signals\NullBillingSignals;
 use Cbox\Billing\Client\ValueObjects\CumulativeUsage;
 
 /**
@@ -25,6 +27,7 @@ class UsageReporter
     public function __construct(
         private readonly BillingTransport $transport,
         private readonly UsageBuffer $buffer,
+        private readonly BillingSignals $signals = new NullBillingSignals,
     ) {}
 
     /**
@@ -45,6 +48,8 @@ class UsageReporter
                 // Cumulative totals remain in the buffer; the next flush backfills.
             }
         }
+
+        $this->signals->reported($reported);
 
         return $reported;
     }

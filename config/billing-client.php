@@ -41,6 +41,40 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Single-flight refill lock
+    |--------------------------------------------------------------------------
+    |
+    | A burst that empties a lease is coalesced behind a per-(org, meter) cache lock
+    | so it triggers ONE refill round-trip, not a thundering herd. `refill_lock_ttl`
+    | is how long (seconds) the lock is held while a refill is in flight; the caller
+    | that holds it fetches, and concurrent callers wait up to `refill_lock_wait`
+    | seconds and then reuse the freshly-leased slice. Requires a cache store that
+    | supports atomic locks (Redis/Memcached/database/array); the file/null stores do
+    | not, and the refill runs directly (correct, just not coalesced).
+    |
+    */
+
+    'refill_lock_ttl' => (int) env('BILLING_CLIENT_REFILL_LOCK_TTL', 10),
+
+    'refill_lock_wait' => (int) env('BILLING_CLIENT_REFILL_LOCK_WAIT', 5),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local reservation recovery
+    |--------------------------------------------------------------------------
+    |
+    | A held reservation is recorded with a TTL so a request that crashes before it
+    | commits or releases does not strand its leased units for the rest of the period.
+    | `reservation_ttl` (seconds) is how long a hold lives before the
+    | `billing:sweep-reservations` command returns its units to the local slice.
+    | Schedule that command at roughly this cadence to bound leaked capacity.
+    |
+    */
+
+    'reservation_ttl' => (int) env('BILLING_CLIENT_RESERVATION_TTL', 300),
+
+    /*
+    |--------------------------------------------------------------------------
     | Usage reporting
     |--------------------------------------------------------------------------
     |
@@ -75,12 +109,39 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Usage buffer
+    |--------------------------------------------------------------------------
+    |
+    | Where committed usage is durably appended before it is reported. Two drivers:
+    |
+    |   'cache'    — atomic-increment cache counters (the default). Point it at a
+    |                PERSISTENT cache store; a VOLATILE cache (an in-memory or
+    |                LRU-evicting store) can silently drop unreported usage on eviction
+    |                or restart, losing units.
+    |   'database' — a relational table (crash-safe, survives eviction and restart).
+    |                Publish and run the package migration first:
+    |                `php artisan vendor:publish --tag=billing-client-migrations`.
+    |
+    | `buffer_table` and `buffer_connection` apply to the database driver; a null
+    | connection uses the app's default database connection.
+    |
+    */
+
+    'buffer' => env('BILLING_CLIENT_BUFFER', 'cache'),
+
+    'buffer_table' => env('BILLING_CLIENT_BUFFER_TABLE', 'billing_client_usage'),
+
+    'buffer_connection' => env('BILLING_CLIENT_BUFFER_CONNECTION'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Local store
     |--------------------------------------------------------------------------
     |
-    | The cache store backing the node-local lease counters and the durable usage
-    | ledger. Any atomic-increment cache driver works (array in tests, Redis/database
-    | in production). `null` uses the app's default cache store.
+    | The cache store backing the node-local lease counters, the reservation registry,
+    | and (for the cache buffer) the usage ledger. Any atomic-increment cache driver
+    | works (array in tests, Redis/database in production). `null` uses the app's
+    | default cache store.
     |
     */
 

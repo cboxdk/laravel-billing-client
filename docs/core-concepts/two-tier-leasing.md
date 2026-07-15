@@ -50,3 +50,15 @@ expire.
 remaining balance is low, so the *next* reserve rarely blocks on the network. The top-up
 is best-effort: if billing is briefly unreachable it is simply deferred to the next
 authoritative refill.
+
+## Single-flight refills
+
+When a burst of concurrent requests empties a slice at once, every one of them would try
+to refill — a thundering herd of identical lease round-trips. The `LeaseManager` guards
+a refill with a per-(org, meter) cache lock, so the burst is **coalesced into one**
+round-trip: the first caller leases, and the others wait, then re-check the slice and
+**reuse** the freshly-leased units instead of issuing their own. Tune the lock with
+`refill_lock_ttl` (how long a refill may hold it) and `refill_lock_wait` (how long a
+waiter blocks before falling back to a direct refill). This needs a cache store that
+supports atomic locks (Redis/Memcached/database/array); on a store that cannot lock, the
+refill simply runs directly — correct, just not coalesced.
