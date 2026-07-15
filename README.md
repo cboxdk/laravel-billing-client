@@ -47,10 +47,33 @@ public function handle(BillingClient $billing): mixed
 }
 ```
 
-Schedule the background usage flush:
+Reserve several meters atomically by passing a `[meter => estimate]` map — all-or-nothing
+across dimensions, each taken from its own local lease:
+
+```php
+$set = $billing->reserve('org_123', ['api.calls' => 1, 'compute.ms' => 250]);
+$billing->commit($set, ['api.calls' => 1, 'compute.ms' => 210]);
+```
+
+Schedule the background usage flush and the abandoned-reservation sweep:
 
 ```php
 Schedule::command('billing:report-usage')->everyMinute();
+Schedule::command('billing:sweep-reservations')->everyFiveMinutes();
+```
+
+### Self-service management
+
+A typed `BillingManagement` client (and `BillingManager` facade) lets a product app's
+users manage their own billing over the management API:
+
+```php
+use Cbox\Billing\Client\Facades\BillingManager;
+
+$plans   = BillingManager::plans();
+$preview = BillingManager::previewChange('org_123', 'pro');
+$result  = BillingManager::subscribe('org_123', 'pro');   // + payment intent if due
+$usage   = BillingManager::usage('org_123');
 ```
 
 ## How it works
@@ -77,25 +100,40 @@ Failure handling splits by cause:
   policy: `allow` admits best-effort (usage still buffered and reconciled later); `deny`
   refuses.
 
+### More enforcement hardening
+
+- **Reservation TTL recovery.** A held reservation a crashed request never settles is
+  swept back to the local slice (`billing:sweep-reservations`), not leaked.
+- **Single-flight refills.** A burst that empties a lease is coalesced behind a
+  per-(org, meter) cache lock into one round-trip.
+- **Durable buffer options.** Cache-backed by default, or a crash-safe `database` buffer
+  (`buffer => 'database'`; publish the migration) that survives eviction and restart.
+- **Observability signals.** `BillingSignals` (allowed / denied / refill / report) so a
+  host can meter the meter; no-op by default, `LoggingBillingSignals` or your own metrics
+  optional.
+
 ## Design
 
-- **One network seam.** `Contracts\BillingTransport` is the only thing that touches the
-  network — `Http\HttpBillingTransport` (bearer token, deny-by-default about responses)
-  in production, `Testing\FakeBillingTransport` in tests.
-- **Contracts-first, deny-by-default.** Depend on interfaces; unknown meters are not
-  entitled; malformed responses raise rather than being trusted.
+- **One network seam per surface.** `Contracts\BillingTransport` (enforcement) and
+  `Contracts\ManagementTransport` (self-service) are the only things that touch the
+  network — real `Http\*` implementations (bearer token, deny-by-default about responses)
+  in production, `Testing\Fake*Transport` in tests.
+- **Contracts-first, deny-by-default.** Depend on interfaces; unknown meters/plans are
+  not entitled; malformed or non-2xx responses raise rather than being trusted.
 - **Dogfooded testing.** `Testing\InteractsWithBillingClient` drives the whole two-tier
-  flow offline; the package's own suite uses it.
+  flow and the management flow offline; the package's own suite uses it.
 
 ## Requirements
 
 PHP `^8.4`; Laravel `^12 || ^13`. A cache store with atomic `increment` / `decrement`
-(any Laravel driver) backs the local counters and usage ledger.
+(any Laravel driver) backs the local counters, the reservation registry, and the cache
+usage ledger; the database buffer additionally uses `illuminate/database`.
 
 ## Documentation
 
-See [`docs/`](docs/index.md) — overview, quickstart, and core concepts (two-tier
-leasing, cumulative reporting, the failure policy, and the architecture).
+See [`docs/`](docs/index.md) — overview, quickstart, core concepts (two-tier leasing,
+multi-meter enforcement, reservation recovery, cumulative reporting, the failure policy,
+the management client, and the architecture), and the self-service cookbook.
 
 ## License
 

@@ -22,9 +22,29 @@ class BillingClientHarness
 
         $client = $this->makeBillingClient(leaseSize: 100, failurePolicy: FailurePolicy::Allow);
 
+        // The single-meter reserve narrows to Reservation via the conditional return type.
         $reservation = $client->reserve('org_a', 'api.calls', 5);
         $client->commit($reservation, 5);
 
         return $client->report('org_a');
+    }
+
+    public function reserveSetTakeAndSweep(): int
+    {
+        $this->transport()->grant('org_a', 'api.calls', 1_000)->grant('org_a', 'storage.gb', 500);
+        $this->recordSignals();
+
+        $client = $this->makeBillingClient(leaseSize: 100, reservationTtl: 60);
+
+        // The array form narrows to ReservationSet via the conditional return type.
+        $set = $client->reserve('org_a', ['api.calls' => 5, 'storage.gb' => 2]);
+        $client->commit($set, ['api.calls' => 5, 'storage.gb' => 2]);
+
+        return $this->sweeper()->sweep((int) round(microtime(true) * 1000));
+    }
+
+    public function browsePlans(): int
+    {
+        return count($this->makeBillingManagement()->plans());
     }
 }

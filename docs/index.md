@@ -30,17 +30,32 @@ other drift is reporting lag, which the cumulative, self-correcting report close
 ## What you get
 
 - A `BillingClient` service (and `Billing` facade) with `reserve` / `commit` /
-  `release` / `can`.
-- A single network seam, `Contracts\BillingTransport`, with a real HTTP
+  `release` / `can` — single-meter **or** a `[meter => estimate]` set held
+  [atomically across dimensions](core-concepts/multi-meter-enforcement.md).
+- [Reservation TTL recovery](core-concepts/reservation-ttl.md): a held reservation that
+  a crashed request never settles is swept back to the local slice, not leaked.
+- [Single-flight refills](core-concepts/two-tier-leasing.md): a burst that empties a
+  lease is coalesced behind a per-(org, meter) lock into one round-trip.
+- A durable usage buffer — cache-backed by default, or a crash-safe
+  **database** buffer — plus observability signals for allowed / denied / refill /
+  report.
+- A single enforcement seam, `Contracts\BillingTransport`, with a real HTTP
   implementation and an in-memory fake for tests.
+- A typed [self-service management client](core-concepts/management-client.md)
+  (`BillingManagement` + `BillingManager` facade) over its own transport seam, for
+  letting a product app's users browse plans, subscribe, change, cancel, and read usage
+  and invoices.
 - Configurable fail-open / fail-closed behaviour for the moment the SDK can neither
   lease locally nor reach billing.
 
 ## Sections
 
 - [Getting started](getting-started/_index.md) — install, configure, and test.
-- [Core concepts](core-concepts/_index.md) — the two-tier lease, cumulative
-  reporting, the failure policy, and the architecture.
+- [Core concepts](core-concepts/_index.md) — the two-tier lease, multi-meter
+  enforcement, reservation recovery, cumulative reporting, the failure policy, the
+  management client, and the architecture.
+- [Cookbook](cookbook/_index.md) — self-service recipes: subscribe, change & cancel,
+  and show usage.
 
 > This package is the enforcement **client**. The metering authority, allowance
 > accounting, and ingest live in the deployable Cbox Billing service, which this SDK
