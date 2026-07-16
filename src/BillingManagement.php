@@ -7,8 +7,13 @@ namespace Cbox\Billing\Client;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
+use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\PaymentIntent;
+use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
+use Cbox\Billing\Client\ValueObjects\PortalSession;
+use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
@@ -113,5 +118,84 @@ class BillingManagement
     public function invoices(string $org): array
     {
         return $this->transport->invoices($org);
+    }
+
+    /**
+     * Open a hosted-checkout session (ADR-0009 path A) for `org` to take up `plan`,
+     * returning the `url` to redirect to and when it expires. Optionally price it in
+     * `$currency`.
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+    {
+        return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency);
+    }
+
+    /**
+     * Open a billing-portal session (ADR-0009 path A) for `org`, returning the `url` to
+     * redirect the user to.
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function createPortalSession(string $org, string $returnUrl): PortalSession
+    {
+        return $this->transport->createPortalSession($org, $returnUrl);
+    }
+
+    /**
+     * Create a gateway setup intent (ADR-0009 path B) so `org` can store a payment method
+     * with no immediate charge. Returns the `{gateway, publishableKey, clientSecret}` the
+     * front-end mounts the gateway element with.
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function createSetupIntent(string $org): SetupIntent
+    {
+        return $this->transport->createSetupIntent($org);
+    }
+
+    /**
+     * Create a gateway payment intent (ADR-0009 path B) charging `org` — for either an
+     * existing `$reference` (e.g. an open invoice) or an ad-hoc `$amountMinor` in
+     * `$currency`; at least one must be given.
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function createPaymentIntent(string $org, ?string $reference = null, ?int $amountMinor = null, ?string $currency = null): PaymentIntent
+    {
+        return $this->transport->createPaymentIntent($org, $reference, $amountMinor, $currency);
+    }
+
+    /**
+     * The organization's stored payment methods.
+     *
+     * @return list<PaymentMethod>
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function paymentMethods(string $org): array
+    {
+        return $this->transport->paymentMethods($org);
+    }
+
+    /**
+     * Make payment method `$id` the default for `org`.
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function setDefaultPaymentMethod(string $org, string $id): void
+    {
+        $this->transport->setDefaultPaymentMethod($org, $id);
+    }
+
+    /**
+     * Remove payment method `$id` from `org`.
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function removePaymentMethod(string $org, string $id): void
+    {
+        $this->transport->removePaymentMethod($org, $id);
     }
 }

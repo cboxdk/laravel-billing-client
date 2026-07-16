@@ -6,6 +6,7 @@ namespace Cbox\Billing\Client\Tests\Fixtures;
 
 use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Testing\InteractsWithBillingClient;
+use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 
 /**
  * A static composition site for {@see InteractsWithBillingClient} so PHPStan analyses
@@ -46,5 +47,19 @@ class BillingClientHarness
     public function browsePlans(): int
     {
         return count($this->makeBillingManagement()->plans());
+    }
+
+    public function defaultPaymentMethodBrand(): string
+    {
+        $this->managementTransport()->withPaymentMethod(
+            'org_a',
+            new PaymentMethod('pm_1', 'visa', '4242', 12, 2030, isDefault: true),
+        );
+
+        $management = $this->makeBillingManagement();
+        $management->createSetupIntent('org_a');
+        $management->setDefaultPaymentMethod('org_a', 'pm_1');
+
+        return $management->paymentMethods('org_a')[0]->brand;
     }
 }

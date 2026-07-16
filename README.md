@@ -76,6 +76,21 @@ $result  = BillingManager::subscribe('org_123', 'pro');   // + payment intent if
 $usage   = BillingManager::usage('org_123');
 ```
 
+Collect payment either way — redirect to a billing-hosted checkout/portal session, or drive
+an embedded, gateway-agnostic element in your own UI. The SDK returns
+`{gateway, publishableKey, clientSecret}`; the gateway JavaScript stays the product's
+responsibility and settlement is confirmed by webhook:
+
+```php
+// Hosted (redirect):
+$session = BillingManager::createCheckoutSession('org_123', 'pro', route('billing.done'));
+return redirect()->away($session->url);
+
+// Embedded (in-page element):
+$intent = BillingManager::createPaymentIntent('org_123', amountMinor: 4_900, currency: 'usd');
+// hand $intent->gateway / publishableKey / clientSecret to the front-end; handle SCA there
+```
+
 ## How it works
 
 Two tiers:

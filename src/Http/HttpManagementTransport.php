@@ -8,12 +8,16 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\BillingPeriod;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
+use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
+use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
+use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\PreviewLine;
+use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
@@ -21,6 +25,7 @@ use DateTimeImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -204,6 +209,129 @@ class HttpManagementTransport implements ManagementTransport
         return $invoices;
     }
 
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+    {
+        $path = '/api/v1/checkout-sessions';
+
+        /** @var array<string, mixed> $payload */
+        $payload = ['org' => $org, 'plan' => $plan, 'return_url' => $returnUrl];
+
+        if ($currency !== null) {
+            $payload['currency'] = $currency;
+        }
+
+        $body = $this->post($path, $payload);
+        $raw = is_array($body['checkout_session'] ?? null) ? $body['checkout_session'] : $body;
+
+        return new CheckoutSession(
+            url: $this->stringField($raw, 'url', $path),
+            expiresAt: $this->date($raw['expires_at'] ?? null),
+        );
+    }
+
+    public function createPortalSession(string $org, string $returnUrl): PortalSession
+    {
+        $path = '/api/v1/portal-sessions';
+        $body = $this->post($path, ['org' => $org, 'return_url' => $returnUrl]);
+        $raw = is_array($body['portal_session'] ?? null) ? $body['portal_session'] : $body;
+
+        return new PortalSession(url: $this->stringField($raw, 'url', $path));
+    }
+
+    public function createSetupIntent(string $org): SetupIntent
+    {
+        $path = '/api/v1/setup-intents';
+        $body = $this->post($path, ['org' => $org]);
+        $raw = is_array($body['setup_intent'] ?? null) ? $body['setup_intent'] : $body;
+
+        return new SetupIntent(
+            gateway: $this->stringField($raw, 'gateway', $path),
+            publishableKey: $this->stringField($raw, 'publishable_key', $path),
+            clientSecret: $this->stringField($raw, 'client_secret', $path),
+            status: $this->stringOr($raw, 'status', ''),
+            reference: $this->stringOr($raw, 'reference', ''),
+        );
+    }
+
+    public function createPaymentIntent(string $org, ?string $reference = null, ?int $amountMinor = null, ?string $currency = null): PaymentIntent
+    {
+        if ($reference === null && $amountMinor === null) {
+            throw new InvalidArgumentException('createPaymentIntent requires either a reference or an amount.');
+        }
+
+        $path = '/api/v1/payment-intents';
+
+        /** @var array<string, mixed> $payload */
+        $payload = ['org' => $org];
+
+        if ($reference !== null) {
+            $payload['reference'] = $reference;
+        }
+
+        if ($amountMinor !== null) {
+            $payload['amount_minor'] = $amountMinor;
+        }
+
+        if ($currency !== null) {
+            $payload['currency'] = $currency;
+        }
+
+        $body = $this->post($path, $payload);
+        $raw = is_array($body['payment_intent'] ?? null) ? $body['payment_intent'] : $body;
+
+        return new PaymentIntent(
+            gateway: $this->stringField($raw, 'gateway', $path),
+            publishableKey: $this->stringField($raw, 'publishable_key', $path),
+            clientSecret: $this->stringField($raw, 'client_secret', $path),
+            status: $this->stringOr($raw, 'status', ''),
+            reference: $this->stringOr($raw, 'reference', ''),
+        );
+    }
+
+    public function paymentMethods(string $org): array
+    {
+        $path = '/api/v1/payment-methods/'.rawurlencode($org);
+        $body = $this->get($path);
+
+        $rawMethods = $body['payment_methods'] ?? $body['data'] ?? null;
+
+        if (! is_array($rawMethods)) {
+            throw TransportException::malformed($path, 'missing payment methods array');
+        }
+
+        $methods = [];
+
+        foreach ($rawMethods as $raw) {
+            if (is_array($raw)) {
+                $methods[] = new PaymentMethod(
+                    id: $this->stringField($raw, 'id', $path),
+                    brand: $this->stringOr($raw, 'brand', ''),
+                    last4: $this->stringOr($raw, 'last4', ''),
+                    expMonth: $this->intOr($raw, 'exp_month', 0),
+                    expYear: $this->intOr($raw, 'exp_year', 0),
+                    isDefault: (bool) ($raw['is_default'] ?? false),
+                );
+            }
+        }
+
+        return $methods;
+    }
+
+    public function setDefaultPaymentMethod(string $org, string $id): void
+    {
+        $this->postDiscardingBody(
+            '/api/v1/payment-methods/'.rawurlencode($org).'/default',
+            ['payment_method' => $id],
+        );
+    }
+
+    public function removePaymentMethod(string $org, string $id): void
+    {
+        $this->deleteDiscardingBody(
+            '/api/v1/payment-methods/'.rawurlencode($org).'/'.rawurlencode($id),
+        );
+    }
+
     /**
      * @param  array<array-key, mixed>  $raw
      */
@@ -265,9 +393,11 @@ class HttpManagementTransport implements ManagementTransport
     private function toPaymentIntent(array $raw): PaymentIntent
     {
         return new PaymentIntent(
-            id: $this->stringOr($raw, 'id', ''),
-            status: $this->stringOr($raw, 'status', ''),
+            gateway: $this->stringOr($raw, 'gateway', ''),
+            publishableKey: $this->stringOr($raw, 'publishable_key', ''),
             clientSecret: is_string($raw['client_secret'] ?? null) ? (string) $raw['client_secret'] : null,
+            status: $this->stringOr($raw, 'status', ''),
+            reference: $this->stringOr($raw, 'reference', $this->stringOr($raw, 'id', '')),
         );
     }
 
@@ -288,6 +418,41 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         return $this->decode($response->json(), $path);
+    }
+
+    /**
+     * A POST whose success is all that matters (no response body is read) — for
+     * side-effecting endpoints like setting a default payment method.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function postDiscardingBody(string $path, array $payload): void
+    {
+        try {
+            $response = $this->request()->post($this->url($path), $payload);
+        } catch (ConnectionException $e) {
+            throw TransportException::unreachable($path, $e);
+        }
+
+        if (! $response->successful()) {
+            throw TransportException::status($path, $response->status());
+        }
+    }
+
+    /**
+     * A DELETE whose success is all that matters (no response body is read).
+     */
+    private function deleteDiscardingBody(string $path): void
+    {
+        try {
+            $response = $this->request()->delete($this->url($path));
+        } catch (ConnectionException $e) {
+            throw TransportException::unreachable($path, $e);
+        }
+
+        if (! $response->successful()) {
+            throw TransportException::status($path, $response->status());
+        }
     }
 
     /**
