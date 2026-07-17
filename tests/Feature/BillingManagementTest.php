@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use Cbox\Billing\Client\BillingManagement;
 use Cbox\Billing\Client\Exceptions\TransportException;
+use Cbox\Billing\Client\Testing\FakeManagementTransport;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
@@ -127,4 +129,14 @@ it('refuses to change or cancel a subscription that does not exist', function ()
 
     expect(fn () => $management->changePlan('org_a', 'pro'))->toThrow(TransportException::class);
     expect(fn () => $management->cancel('org_a'))->toThrow(TransportException::class);
+});
+
+it('provisions organizations through the fake with the currency lock mirrored', function (): void {
+    $fake = new FakeManagementTransport;
+    $management = new BillingManagement($fake);
+
+    $management->ensureOrganization('org_1', ['name' => 'Acme', 'billing_currency' => 'USD']);
+    $management->ensureOrganization('org_1', ['name' => 'Acme ApS', 'billing_currency' => 'EUR']);
+
+    expect($fake->organizations()['org_1'])->toBe(['name' => 'Acme ApS', 'billing_currency' => 'USD']);
 });

@@ -62,6 +62,9 @@ class FakeManagementTransport implements ManagementTransport
     /** @var array<string, list<PaymentMethod>> */
     private array $paymentMethods = [];
 
+    /** @var array<string, array<string, mixed>> */
+    private array $organizations = [];
+
     private bool $down = false;
 
     private bool $sessionsExpired = false;
@@ -131,11 +134,49 @@ class FakeManagementTransport implements ManagementTransport
         return $this;
     }
 
-    public function plans(): array
+    public function plans(?string $currency = null): array
     {
         $this->guard('/api/v1/plans');
 
-        return array_values($this->plans);
+        $plans = array_values($this->plans);
+
+        if ($currency === null || $currency === '') {
+            return $plans;
+        }
+
+        // Mirror the server: a plan not priced in the requested currency is omitted.
+        return array_values(array_filter(
+            $plans,
+            static fn ($plan): bool => strcasecmp($plan->currency, $currency) === 0,
+        ));
+    }
+
+    public function ensureOrganization(string $org, array $attributes): void
+    {
+        $this->guard('/api/v1/organizations/'.$org);
+
+        // Mirrors the server: currency is only applied on create (one-way lock).
+        $existing = $this->organizations[$org] ?? null;
+
+        if ($existing !== null) {
+            unset($attributes['billing_currency']);
+            $this->organizations[$org] = array_merge($existing, $attributes);
+
+            return;
+        }
+
+        $this->organizations[$org] = $attributes;
+    }
+
+    /**
+     * The organizations provisioned through {@see ensureOrganization()}, keyed by org id
+     * — for asserting a consumer provisioned before subscribing.
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function organizations(): array
+    {
+        return $this->organizations;
     }
 
     public function subscription(string $org): ?Subscription

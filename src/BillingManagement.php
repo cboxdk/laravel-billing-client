@@ -40,9 +40,22 @@ class BillingManagement
      *
      * @throws TransportException on an infrastructure fault
      */
-    public function plans(): array
+    public function plans(?string $currency = null): array
     {
-        return $this->transport->plans();
+        return $this->transport->plans($currency);
+    }
+
+    /**
+     * Idempotently provision the organization this platform bills for. Safe to call
+     * before every subscribe/checkout; currency is only applied on create.
+     *
+     * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null}  $attributes
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function ensureOrganization(string $org, array $attributes): void
+    {
+        $this->transport->ensureOrganization($org, $attributes);
     }
 
     /**

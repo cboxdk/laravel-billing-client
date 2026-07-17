@@ -45,9 +45,10 @@ class HttpManagementTransport implements ManagementTransport
         private readonly int $timeout = 5,
     ) {}
 
-    public function plans(): array
+    public function plans(?string $currency = null): array
     {
-        $body = $this->get('/api/v1/plans');
+        $query = $currency !== null && $currency !== '' ? '?currency='.rawurlencode(strtoupper($currency)) : '';
+        $body = $this->get('/api/v1/plans'.$query);
 
         $rawPlans = $body['plans'] ?? $body['data'] ?? null;
 
@@ -77,6 +78,11 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         return $this->toSubscription($raw, '/api/v1/subscriptions/{org}');
+    }
+
+    public function ensureOrganization(string $org, array $attributes): void
+    {
+        $this->putDiscardingBody('/api/v1/organizations/'.rawurlencode($org), $attributes);
     }
 
     public function subscribe(string $org, string $plan): SubscriptionResult
@@ -363,11 +369,15 @@ class HttpManagementTransport implements ManagementTransport
             }
         }
 
+        // The catalog endpoint nests the resolved price (`price: {minor, currency}`);
+        // accept the flat `price_minor`/`currency` shape too for older services.
+        $price = is_array($raw['price'] ?? null) ? $raw['price'] : [];
+
         return new Plan(
             key: $this->stringOr($raw, 'key', ''),
             name: $this->stringOr($raw, 'name', ''),
-            priceMinor: $this->intOr($raw, 'price_minor', 0),
-            currency: $this->stringOr($raw, 'currency', ''),
+            priceMinor: isset($price['minor']) ? $this->toInt($price['minor']) : $this->intOr($raw, 'price_minor', 0),
+            currency: isset($price['currency']) && is_string($price['currency']) ? $price['currency'] : $this->stringOr($raw, 'currency', ''),
             interval: $this->stringOr($raw, 'interval', ''),
             entitlements: $entitlements,
         );
@@ -430,6 +440,25 @@ class HttpManagementTransport implements ManagementTransport
     {
         try {
             $response = $this->request()->post($this->url($path), $payload);
+        } catch (ConnectionException $e) {
+            throw TransportException::unreachable($path, $e);
+        }
+
+        if (! $response->successful()) {
+            throw TransportException::status($path, $response->status());
+        }
+    }
+
+    /**
+     * A PUT whose success is all that matters (no response body is read) — for
+     * idempotent upserts like organization provisioning.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function putDiscardingBody(string $path, array $payload): void
+    {
+        try {
+            $response = $this->request()->put($this->url($path), $payload);
         } catch (ConnectionException $e) {
             throw TransportException::unreachable($path, $e);
         }

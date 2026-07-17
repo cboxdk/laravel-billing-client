@@ -37,13 +37,26 @@ use Cbox\Billing\Client\ValueObjects\UsageSummary;
 interface ManagementTransport
 {
     /**
-     * List the subscribable plans (`GET /api/v1/plans`).
+     * List the subscribable plans (`GET /api/v1/plans`), priced in `$currency` when
+     * given (ISO 4217), else the caller's account currency / service default.
      *
      * @return list<Plan>
      *
      * @throws TransportException on an infrastructure fault
      */
-    public function plans(): array;
+    public function plans(?string $currency = null): array;
+
+    /**
+     * Idempotently provision the organization this platform bills for
+     * (`PUT /api/v1/organizations/{org}`). Safe to call before every subscribe /
+     * checkout; `billing_currency` in `$attributes` is only applied on create
+     * (the billing service's one-way currency lock).
+     *
+     * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null}  $attributes
+     *
+     * @throws TransportException on an infrastructure fault
+     */
+    public function ensureOrganization(string $org, array $attributes): void;
 
     /**
      * The organization's current subscription (`GET /api/v1/subscriptions/{org}`), or

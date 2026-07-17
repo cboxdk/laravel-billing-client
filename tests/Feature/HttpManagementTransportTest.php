@@ -167,3 +167,49 @@ it('raises a transport exception on a malformed body', function (): void {
 
     expect(fn () => makeHttpManagement()->plans())->toThrow(TransportException::class);
 });
+
+it('provisions an organization with an idempotent PUT', function (): void {
+    Http::fake([
+        'billing.test/api/v1/organizations/org_1' => Http::response(['organization' => ['id' => 'org_1']], 201),
+    ]);
+
+    makeHttpManagement()->ensureOrganization('org_1', [
+        'name' => 'Acme',
+        'billing_email' => 'billing@acme.test',
+        'billing_currency' => 'USD',
+    ]);
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'PUT'
+        && str_ends_with($request->url(), '/api/v1/organizations/org_1')
+        && $request['name'] === 'Acme'
+        && $request->hasHeader('Authorization', 'Bearer secret-token'));
+});
+
+it('surfaces an organization provisioning failure as a transport exception', function (): void {
+    Http::fake([
+        'billing.test/api/v1/organizations/org_1' => Http::response(['error' => 'nope'], 403),
+    ]);
+
+    makeHttpManagement()->ensureOrganization('org_1', ['name' => 'Acme']);
+})->throws(TransportException::class);
+
+it('parses the nested price shape the live catalog endpoint returns', function (): void {
+    Http::fake([
+        'billing.test/api/v1/plans' => Http::response([
+            'currency' => 'USD',
+            'data' => [
+                [
+                    'key' => 'growth', 'name' => 'Growth', 'interval' => 'month',
+                    'entitlements' => ['conversations' => ['enabled' => true, 'allowance' => 10_000, 'weight' => 0.03, 'overage' => 'bill']],
+                    'price' => ['minor' => 19_900, 'currency' => 'USD'],
+                ],
+            ],
+        ]),
+    ]);
+
+    $plans = makeHttpManagement()->plans();
+
+    expect($plans[0]->priceMinor)->toBe(19_900)
+        ->and($plans[0]->currency)->toBe('USD')
+        ->and($plans[0]->entitlement('conversations')?->weight)->toBe(0.03);
+});

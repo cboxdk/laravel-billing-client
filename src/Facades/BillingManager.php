@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Facade;
 /**
  * Facade over the {@see BillingManagement} self-service client.
  *
- * @method static list<\Cbox\Billing\Client\ValueObjects\Plan> plans()
+ * @method static list<\Cbox\Billing\Client\ValueObjects\Plan> plans(?string $currency = null)
+ * @method static void ensureOrganization(string $org, array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null} $attributes)
  * @method static ?Subscription subscription(string $org)
  * @method static SubscriptionResult subscribe(string $org, string $plan)
  * @method static ChangePreview previewChange(string $org, string $plan)
