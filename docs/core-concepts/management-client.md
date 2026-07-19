@@ -15,7 +15,16 @@ outages.
 ```php
 use Cbox\Billing\Client\Facades\BillingManager;
 
-$plans = BillingManager::plans();                       // list<Plan>
+// Provision the org you bill FIRST — subscribe/checkout on an unknown org 404s.
+// Idempotent, so it's safe to call before every flow. `billing_currency` is applied
+// only on create (the service's one-way currency lock).
+BillingManager::ensureOrganization('org_42', [
+    'name' => 'Acme Inc',
+    'billing_email' => 'billing@acme.test',
+    'billing_currency' => 'USD',
+]);
+
+$plans = BillingManager::plans('USD');                  // list<Plan>, priced in USD
 $current = BillingManager::subscription('org_42');      // ?Subscription
 $result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult (+ payment intent?)
 $preview = BillingManager::previewChange('org_42', 'scale');
@@ -24,6 +33,22 @@ $canceled = BillingManager::cancel('org_42', atPeriodEnd: true);
 $usage = BillingManager::usage('org_42');               // UsageSummary
 $invoices = BillingManager::invoices('org_42');         // list<Invoice>
 ```
+
+## Provision the organization first
+
+`subscribe`, `changePlan`, and checkout all act on an organization that must already
+exist on the billing service — calling them for an unknown org returns a
+`TransportException` (404 "Unknown organization"). `ensureOrganization($org, $attributes)`
+is an idempotent upsert (`PUT /api/v1/organizations/{org}`); call it once before the
+first billing action for a customer. It's the first step in every cookbook below.
+
+## Multi-product instances & currency
+
+On a shared billing instance serving several products, your API token is **bound to one
+product**: `plans()` returns only your product's catalog, and subscribe/checkout refuse
+another product's plan keys. Pass a currency to `plans('USD')` (and
+`createCheckoutSession(..., currency: 'USD')`) to price the catalog — a plan not priced
+in that currency is omitted rather than shown at a fabricated rate.
 
 ## The transport seam
 
