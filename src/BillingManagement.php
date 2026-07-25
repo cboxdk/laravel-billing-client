@@ -91,11 +91,16 @@ class BillingManagement
     }
 
     /**
-     * Apply a plan change for `org`, returning the updated subscription.
+     * Apply a plan change for `org`, returning the resulting change preview.
+     *
+     * Returns a {@see ChangePreview}, NOT a subscription: `/change` answers with the same
+     * envelope as `/preview` — what is due now, what was credited, the new recurring amount and
+     * the proration lines. This signature previously claimed a Subscription that the endpoint has
+     * never returned, so the method threw on every call.
      *
      * @throws TransportException on an infrastructure fault
      */
-    public function changePlan(string $org, string $plan): Subscription
+    public function changePlan(string $org, string $plan): ChangePreview
     {
         return $this->transport->changePlan($org, $plan);
     }

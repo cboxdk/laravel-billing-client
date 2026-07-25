@@ -13,7 +13,14 @@ readonly class MeterUsage
 {
     public function __construct(
         public int $used,
-        public int $allowance,
+        /**
+         * The included allowance, or NULL for an UNLIMITED meter.
+         *
+         * The server emits null for any meter with no ceiling. Typing this as a plain `int` made
+         * the whole usage view throw the moment an org had one unlimited meter — a single
+         * unlimited meter broke the entire response, not just its own row.
+         */
+        public ?int $allowance,
         public int $overage,
     ) {}
 

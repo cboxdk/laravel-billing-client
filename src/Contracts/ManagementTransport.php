@@ -88,7 +88,7 @@ interface ManagementTransport
      *
      * @throws TransportException on an infrastructure fault
      */
-    public function changePlan(string $org, string $plan): Subscription;
+    public function changePlan(string $org, string $plan): ChangePreview;
 
     /**
      * Cancel `org`'s subscription (`POST /api/v1/subscriptions/{org}/cancel`);

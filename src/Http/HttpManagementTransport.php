@@ -106,17 +106,33 @@ class HttpManagementTransport implements ManagementTransport
     public function previewChange(string $org, string $plan): ChangePreview
     {
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/preview';
-        $body = $this->post($path, ['plan' => $plan]);
 
+        return $this->toChangePreview($this->post($path, ['plan' => $plan]), $path);
+    }
+
+    /**
+     * Map the server's change-preview envelope.
+     *
+     * ONE mapper for both `/preview` and `/change`, because the server returns the identical
+     * envelope from both — `presentPreview()` builds it in a single place. Two hand-written copies
+     * are how `/change` came to read a `subscription` key the server never sends.
+     *
+     * @param  array<array-key, mixed>  $body
+     */
+    private function toChangePreview(array $body, string $path): ChangePreview
+    {
         $rawLines = $body['lines'] ?? [];
         $lines = [];
 
         if (is_array($rawLines)) {
             foreach ($rawLines as $line) {
                 if (is_array($line)) {
+                    // The server emits `minor` on a proration line, not `amount_minor`. Reading the
+                    // wrong key threw whenever a change actually prorated — i.e. every mid-cycle
+                    // change, which is the case these methods exist for.
                     $lines[] = new PreviewLine(
                         $this->stringOr($line, 'description', ''),
-                        $this->intField($line, 'amount_minor', $path),
+                        $this->intField($line, 'minor', $path),
                     );
                 }
             }
@@ -131,32 +147,28 @@ class HttpManagementTransport implements ManagementTransport
         );
     }
 
-    public function changePlan(string $org, string $plan): Subscription
+    /**
+     * `POST /subscriptions/{org}/change` answers with a PREVIEW envelope — `{scheduled, due_now,
+     * credit, new_recurring, effective_at, lines}` — not a subscription object. This method
+     * required `$body['subscription']` and therefore threw on EVERY call, against every version of
+     * the server. It now returns the change preview the endpoint actually produces.
+     */
+    public function changePlan(string $org, string $plan): ChangePreview
     {
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/change';
-        $body = $this->post($path, ['plan' => $plan]);
 
-        $raw = $body['subscription'] ?? null;
-
-        if (! is_array($raw)) {
-            throw TransportException::malformed($path, 'missing subscription object');
-        }
-
-        return $this->toSubscription($raw, $path);
+        return $this->toChangePreview($this->post($path, ['plan' => $plan]), $path);
     }
 
+    /**
+     * `POST /subscriptions/{org}/cancel` answers with the subscription UNWRAPPED. Requiring a
+     * `subscription` envelope made this throw on every call.
+     */
     public function cancel(string $org, bool $atPeriodEnd): Subscription
     {
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/cancel';
-        $body = $this->post($path, ['at_period_end' => $atPeriodEnd]);
 
-        $raw = $body['subscription'] ?? null;
-
-        if (! is_array($raw)) {
-            throw TransportException::malformed($path, 'missing subscription object');
-        }
-
-        return $this->toSubscription($raw, $path);
+        return $this->toSubscription($this->post($path, ['at_period_end' => $atPeriodEnd]), $path);
     }
 
     public function usage(string $org): UsageSummary
@@ -170,9 +182,11 @@ class HttpManagementTransport implements ManagementTransport
         if (is_array($rawMeters)) {
             foreach ($rawMeters as $meter => $definition) {
                 if (is_string($meter) && is_array($definition)) {
+                    // `allowance` is legitimately null for an unlimited meter — required-int
+                    // parsing rejected it and took the whole usage view down with it.
                     $meters[$meter] = new MeterUsage(
                         $this->intField($definition, 'used', $path),
-                        $this->intField($definition, 'allowance', $path),
+                        ($definition['allowance'] ?? null) === null ? null : $this->intField($definition, 'allowance', $path),
                         $this->intOr($definition, 'overage', 0),
                     );
                 }
@@ -270,12 +284,14 @@ class HttpManagementTransport implements ManagementTransport
         /** @var array<string, mixed> $payload */
         $payload = ['org' => $org];
 
+        // The server validates `invoice` and `amount`, not `reference` and `amount_minor` —
+        // posting the old names failed validation with a 422 on every call.
         if ($reference !== null) {
-            $payload['reference'] = $reference;
+            $payload['invoice'] = $reference;
         }
 
         if ($amountMinor !== null) {
-            $payload['amount_minor'] = $amountMinor;
+            $payload['amount'] = $amountMinor;
         }
 
         if ($currency !== null) {
@@ -327,7 +343,8 @@ class HttpManagementTransport implements ManagementTransport
     {
         $this->postDiscardingBody(
             '/api/v1/payment-methods/'.rawurlencode($org).'/default',
-            ['payment_method' => $id],
+            // The server validates `id`; `payment_method` was rejected with a 422 every time.
+            ['id' => $id],
         );
     }
 
@@ -362,7 +379,7 @@ class HttpManagementTransport implements ManagementTransport
                 $entitlements[] = new Entitlement(
                     meter: $meter,
                     enabled: (bool) ($definition['enabled'] ?? true),
-                    allowance: $this->toInt($definition['allowance'] ?? 0),
+                    allowance: ($definition['allowance'] ?? null) === null ? null : $this->toInt($definition['allowance']),
                     weight: $this->toFloat($definition['weight'] ?? 1.0),
                     overage: is_string($definition['overage'] ?? null) ? (string) $definition['overage'] : 'block',
                 );

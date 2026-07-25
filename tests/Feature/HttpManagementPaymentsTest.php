@@ -90,9 +90,10 @@ it('creates a payment intent over HTTP from an amount', function (): void {
         ->and($intent->reference)->toBe('pi_1');
 
     Http::assertSent(fn (Request $request): bool => $request->url() === 'https://billing.test/api/v1/payment-intents'
-        && $request['amount_minor'] === 4_900
+        // The server validates `amount`, not `amount_minor`.
+        && $request['amount'] === 4_900
         && $request['currency'] === 'usd'
-        && ! isset($request['reference']));
+        && ! isset($request['invoice']));
 });
 
 it('rejects a payment intent request with neither a reference nor an amount', function (): void {
@@ -126,7 +127,8 @@ it('sets a default payment method over HTTP', function (): void {
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'https://billing.test/api/v1/payment-methods/org_a/default'
-        && $request['payment_method'] === 'pm_2');
+        // The server validates `id`, not `payment_method`.
+        && $request['id'] === 'pm_2');
 });
 
 it('removes a payment method over HTTP with a DELETE', function (): void {

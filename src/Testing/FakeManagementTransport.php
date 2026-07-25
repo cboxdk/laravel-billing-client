@@ -244,14 +244,19 @@ class FakeManagementTransport implements ManagementTransport
         );
     }
 
-    public function changePlan(string $org, string $plan): Subscription
+    /**
+     * Mirrors the real endpoint: the subscription is updated, and a CHANGE PREVIEW is returned.
+     * The fake used to hand back a Subscription, which is how a double could stay green while the
+     * real transport threw on every call.
+     */
+    public function changePlan(string $org, string $plan): ChangePreview
     {
         $this->guard('/api/v1/subscriptions/'.$org.'/change');
 
         $this->requirePlan($plan, '/api/v1/subscriptions/'.$org.'/change');
         $current = $this->requireSubscription($org, '/api/v1/subscriptions/'.$org.'/change');
 
-        $updated = new Subscription(
+        $this->subscriptions[$org] = new Subscription(
             plan: $plan,
             status: 'active',
             periodStart: $current->periodStart,
@@ -259,9 +264,7 @@ class FakeManagementTransport implements ManagementTransport
             renewsAt: $current->periodEnd,
         );
 
-        $this->subscriptions[$org] = $updated;
-
-        return $updated;
+        return $this->previewChange($org, $plan);
     }
 
     public function cancel(string $org, bool $atPeriodEnd): Subscription

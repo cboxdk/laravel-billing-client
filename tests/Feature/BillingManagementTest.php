@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Cbox\Billing\Client\BillingManagement;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Testing\FakeManagementTransport;
+use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
@@ -68,13 +69,16 @@ it('previews a plan change with prorated credit and net due-now', function (): v
         ->and($preview->lines)->not->toBeEmpty();
 });
 
-it('changes an existing subscription plan', function (): void {
+// `/change` answers with the same envelope as `/preview` — what is due now, what was credited,
+// the new recurring amount and the proration lines — not a subscription object. The subscription
+// is still updated; it just is not what comes back.
+it('changes an existing subscription plan and returns the change preview', function (): void {
     $management = $this->makeBillingManagement();
     $management->subscribe('org_a', 'free');
 
-    $subscription = $management->changePlan('org_a', 'pro');
+    $preview = $management->changePlan('org_a', 'pro');
 
-    expect($subscription->plan)->toBe('pro')
+    expect($preview)->toBeInstanceOf(ChangePreview::class)
         ->and($management->subscription('org_a')?->plan)->toBe('pro');
 });
 

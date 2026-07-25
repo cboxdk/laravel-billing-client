@@ -93,8 +93,11 @@ it('previews a plan change with itemized lines', function (): void {
             'new_recurring_minor' => 4_900,
             'effective_at' => '2026-07-16T12:00:00+00:00',
             'lines' => [
-                ['description' => 'Pro plan', 'amount_minor' => 4_900],
-                ['description' => 'Unused credit', 'amount_minor' => -2_500],
+                // The server emits `minor` on a proration line. These fixtures used
+                // `amount_minor` — the SDK's own assumption — so the suite stayed green while the
+                // real transport threw on every prorated change.
+                ['description' => 'Pro plan', 'minor' => 4_900],
+                ['description' => 'Unused credit', 'minor' => -2_500],
             ],
         ]),
     ]);
@@ -110,9 +113,10 @@ it('previews a plan change with itemized lines', function (): void {
 
 it('cancels at period end', function (): void {
     Http::fake([
-        'billing.test/api/v1/subscriptions/org_a/cancel' => Http::response([
-            'subscription' => ['plan' => 'pro', 'status' => 'active', 'renews_at' => null],
-        ]),
+        // The server returns the subscription UNWRAPPED from /cancel.
+        'billing.test/api/v1/subscriptions/org_a/cancel' => Http::response(
+            ['plan' => 'pro', 'status' => 'active', 'renews_at' => null],
+        ),
     ]);
 
     $subscription = makeHttpManagement()->cancel('org_a', true);

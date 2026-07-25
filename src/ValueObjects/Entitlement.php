@@ -17,7 +17,8 @@ readonly class Entitlement
     public function __construct(
         public string $meter,
         public bool $enabled,
-        public int $allowance,
+        /** The included allowance, or NULL for an unlimited meter — the server emits null. */
+        public ?int $allowance,
         public float $weight,
         public string $overage,
     ) {}
