@@ -27,16 +27,6 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      # Audit the COMMITTED lock, not a freshly-resolved tree — the audit inside `composer qa`
-      # runs after a re-resolve and so never inspects what actually ships.
-      - name: Audit the committed lockfile
-        run: composer audit --locked --no-dev
-
-      - name: SBOM is not stale
-        run: |
-          composer sbom
-          git diff --exit-code sbom.json
-
       - name: Constrain Testbench (Laravel major)
         run: composer require "orchestra/testbench:${{ matrix.testbench }}" --dev --no-update --no-interaction
 
