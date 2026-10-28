@@ -67,3 +67,57 @@ it('does not double-reclaim across repeated sweeps', function (): void {
     expect($this->sweeper()->sweep($this->billingNowMs))->toBe(0)
         ->and($client->balance('org_a', 'api.calls'))->toBe(100);
 });
+
+/**
+ * INT-8: a hold that outlives its TTL (a slow request, not a crashed one) was credited back
+ * TWICE — once by the sweeper, then again by the late commit/release — inflating the local
+ * slice beyond what billing leased. Whoever closes the hold first owns the give-back.
+ */
+it('does not credit a long hold back twice when it is released after the sweep', function (): void {
+    $this->transport()->grant('org_a', 'api.calls', 1_000);
+    $this->billingNowMs = 5_000_000;
+    $client = $this->makeBillingClient(leaseSize: 100, refillThreshold: 0, reservationTtl: 60);
+
+    $reservation = $client->reserve('org_a', 'api.calls', 40);
+
+    $this->billingNowMs = 5_000_000 + 61_000;
+    expect($this->sweeper()->sweep($this->billingNowMs))->toBe(1)
+        ->and($client->balance('org_a', 'api.calls'))->toBe(100);
+
+    $client->release($reservation);
+
+    expect($client->balance('org_a', 'api.calls'))->toBe(100);
+});
+
+it('does not credit a long hold back twice when it is committed after the sweep', function (): void {
+    $this->transport()->grant('org_a', 'api.calls', 1_000);
+    $this->billingNowMs = 6_000_000;
+    $client = $this->makeBillingClient(leaseSize: 100, refillThreshold: 0, reservationTtl: 60);
+
+    $reservation = $client->reserve('org_a', 'api.calls', 40);
+
+    $this->billingNowMs = 6_000_000 + 61_000;
+    $this->sweeper()->sweep($this->billingNowMs);
+
+    // The sweeper already returned all 40. The late commit used 30 of them, so the slice
+    // must end at 70 (100 leased − 30 spent), not 110 (a second give-back of the 10 unused).
+    $client->commit($reservation, 30);
+
+    expect($client->balance('org_a', 'api.calls'))->toBe(70)
+        ->and($this->usageBuffer()->cumulative('org_a', 'api.calls'))->toBe(30);
+});
+
+it('does not credit a long multi-meter hold back twice', function (): void {
+    $this->transport()->grant('org_a', 'api.calls', 1_000)->grant('org_a', 'storage.gb', 500);
+    $this->billingNowMs = 7_000_000;
+    $client = $this->makeBillingClient(leaseSize: 100, refillThreshold: 0, reservationTtl: 60);
+
+    $set = $client->reserve('org_a', ['api.calls' => 30, 'storage.gb' => 10]);
+
+    $this->billingNowMs = 7_000_000 + 61_000;
+    $this->sweeper()->sweep($this->billingNowMs);
+    $client->commit($set, ['api.calls' => 30, 'storage.gb' => 0]);
+
+    expect($client->balance('org_a', 'api.calls'))->toBe(70)
+        ->and($client->balance('org_a', 'storage.gb'))->toBe(100);
+});

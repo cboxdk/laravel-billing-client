@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/LeaseController.php::__invoke",
+    "request": "POST /api/v1/leases",
+    "status": 200,
+    "body": {"lease_id": "lease_3m9QnVbXk2sR8tLwP4yZcA1d", "granted": 100, "expires_at": "2026-10-28T12:05:00+00:00"}
+}

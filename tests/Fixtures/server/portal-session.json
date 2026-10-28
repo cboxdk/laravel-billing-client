@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/Management/PortalSessionController.php::__invoke",
+    "request": "POST /api/v1/portal-sessions",
+    "status": 201,
+    "body": {"url": "https://app.cboxbilling.com/portal/ps_9a7c3e", "expires_at": "2026-10-28T12:30:00+00:00"}
+}

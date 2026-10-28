@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client\Contracts;
 
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\Testing\FakeBillingTransport;
@@ -23,8 +25,11 @@ use Cbox\Billing\Client\ValueObjects\RemoteReservation;
  * testable offline and a host can swap the transport.
  *
  * A method that cannot complete — network error, non-2xx, or malformed body — throws
- * a {@see TransportException}. It never returns a fabricated success: the caller's
- * failure policy, not the transport, decides how an outage resolves.
+ * a {@see TransportException}: a {@see BillingRefused} when billing said no (a 4xx other
+ * than 408/429), a {@see BillingUnavailable} when it could not answer. It never returns a
+ * fabricated success. The caller's failure policy resolves only an unavailable billing; a
+ * refusal always fails closed, so an implementation must not report a refusal as an
+ * outage.
  */
 interface BillingTransport
 {
@@ -34,7 +39,7 @@ interface BillingTransport
      * allowance is exhausted); the granted units are reserved centrally until used or
      * expired.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function lease(string $org, string $meter, int $size): LeaseGrant;
 
@@ -45,7 +50,7 @@ interface BillingTransport
      *
      * @param  list<CumulativeUsage>  $entries
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function reportUsage(string $org, array $entries): void;
 
@@ -56,7 +61,7 @@ interface BillingTransport
      *
      * @param  list<MeterEstimate>  $meters
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function reserve(string $org, array $meters): RemoteReservation;
 
@@ -66,14 +71,14 @@ interface BillingTransport
      *
      * @param  list<MeterActual>  $actuals
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function commit(string $reservationId, array $actuals): void;
 
     /**
      * Read `org`'s entitlement set (`GET /api/v1/entitlements/{org}`).
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function entitlements(string $org): Entitlements;
 }

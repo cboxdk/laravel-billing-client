@@ -1,0 +1,9 @@
+{
+    "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::show + present",
+    "request": "GET /api/v1/subscriptions/{org}",
+    "status": 200,
+    "body": {"plan": "pro", "status": "active", "paused": false, "seats": 1,
+        "period_start": "2026-10-01T00:00:00+00:00", "period_end": "2026-11-01T00:00:00+00:00",
+        "renews_at": "2026-11-01T00:00:00+00:00", "trial_ends_at": null, "canceled_at": null,
+        "pending_change": null, "add_ons": []}
+}

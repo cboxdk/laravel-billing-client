@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\BillingPeriod;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
@@ -32,7 +34,10 @@ use Throwable;
  * The real {@see ManagementTransport}: it speaks the Cbox Billing management HTTP API
  * with a bearer token over Laravel's HTTP client. Like the enforcement transport it is
  * deny-by-default about responses — any non-2xx status, connection error, or malformed
- * body raises a {@see TransportException} rather than fabricating a success. Every
+ * body raises a {@see TransportException} rather than fabricating a success: a
+ * {@see BillingRefused} when billing said no (a 4xx other than 408/429), a
+ * {@see BillingUnavailable} when it could not answer. The one exception is the 404
+ * {@see Subscription()} gets for an organization with no subscription, which is null. Every
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
@@ -67,9 +72,23 @@ class HttpManagementTransport implements ManagementTransport
         return $plans;
     }
 
+    /**
+     * The server answers 404 for an organization with no serving subscription
+     * (`SubscriptionController::show`). That is the normal state of a brand-new
+     * organization, so it reads as null. Throwing on it meant a new organization could not
+     * even load the page it subscribes from. Every other refusal (401, 403) still throws.
+     */
     public function subscription(string $org): ?Subscription
     {
-        $body = $this->get('/api/v1/subscriptions/'.rawurlencode($org));
+        try {
+            $body = $this->get('/api/v1/subscriptions/'.rawurlencode($org));
+        } catch (BillingRefused $e) {
+            if ($e->status === 404) {
+                return null;
+            }
+
+            throw $e;
+        }
 
         $raw = $body['subscription'] ?? $body;
 
@@ -441,7 +460,7 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         if (! $response->successful()) {
-            throw TransportException::status($path, $response->status());
+            throw TransportException::fromResponse($path, $response);
         }
 
         return $this->decode($response->json(), $path);
@@ -462,7 +481,7 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         if (! $response->successful()) {
-            throw TransportException::status($path, $response->status());
+            throw TransportException::fromResponse($path, $response);
         }
     }
 
@@ -481,7 +500,7 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         if (! $response->successful()) {
-            throw TransportException::status($path, $response->status());
+            throw TransportException::fromResponse($path, $response);
         }
     }
 
@@ -497,7 +516,7 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         if (! $response->successful()) {
-            throw TransportException::status($path, $response->status());
+            throw TransportException::fromResponse($path, $response);
         }
     }
 
@@ -513,7 +532,7 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         if (! $response->successful()) {
-            throw TransportException::status($path, $response->status());
+            throw TransportException::fromResponse($path, $response);
         }
 
         return $this->decode($response->json(), $path);

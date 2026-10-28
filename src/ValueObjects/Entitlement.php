@@ -23,6 +23,12 @@ readonly class Entitlement
         public string $overage,
     ) {}
 
+    /** True for an unlimited meter: billing sends its allowance as null, never as 0. */
+    public function isUnlimited(): bool
+    {
+        return $this->enabled && $this->allowance === null;
+    }
+
     /** True when exceeding the allowance is a hard limit rather than paid overage. */
     public function blocksOnOverage(): bool
     {

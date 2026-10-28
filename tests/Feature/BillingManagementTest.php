@@ -10,6 +10,7 @@ use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\Plan;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
     $this->managementTransport()
@@ -35,15 +36,21 @@ it('returns null for an org with no subscription', function (): void {
     expect($this->makeBillingManagement()->subscription('org_a'))->toBeNull();
 });
 
-it('subscribes an org to a paid plan and surfaces the payment intent', function (): void {
+/**
+ * The 0.3 fake invented a payment intent for every paid subscribe. The server answers
+ * `payment_intent: null` (`SubscriptionController::store`), so the fake now does too, and an
+ * app's "confirm the first payment" branch is no longer exercised against a shape the real
+ * service never sends. The transport still parses an intent if the server adds one.
+ */
+it('subscribes an org to a paid plan with the null payment intent the server sends', function (): void {
     $management = $this->makeBillingManagement();
 
     $result = $management->subscribe('org_a', 'pro');
 
     expect($result->subscription->plan)->toBe('pro')
         ->and($result->subscription->status)->toBe('active')
-        ->and($result->requiresPayment())->toBeTrue()
-        ->and($result->paymentIntent?->status)->toBe('requires_confirmation');
+        ->and($result->paymentIntent)->toBeNull()
+        ->and($result->requiresPayment())->toBeFalse();
 
     // The subscription is now readable.
     expect($management->subscription('org_a')?->plan)->toBe('pro');
@@ -82,15 +89,15 @@ it('changes an existing subscription plan and returns the change preview', funct
         ->and($management->subscription('org_a')?->plan)->toBe('pro');
 });
 
-it('cancels immediately by default and at period end when asked', function (): void {
+it('cancels at period end by default and immediately when asked', function (): void {
     $management = $this->makeBillingManagement();
     $management->subscribe('org_a', 'pro');
 
-    $atEnd = $management->cancel('org_a', atPeriodEnd: true);
+    $atEnd = $management->cancel('org_a');
     expect($atEnd->status)->toBe('active')
         ->and($atEnd->cancelsAtPeriodEnd())->toBeTrue();
 
-    $now = $management->cancel('org_a');
+    $now = $management->cancel('org_a', atPeriodEnd: false);
     expect($now->status)->toBe('canceled');
 });
 
@@ -143,4 +150,34 @@ it('provisions organizations through the fake with the currency lock mirrored', 
     $management->ensureOrganization('org_1', ['name' => 'Acme ApS', 'billing_currency' => 'EUR']);
 
     expect($fake->organizations()['org_1'])->toBe(['name' => 'Acme ApS', 'billing_currency' => 'USD']);
+});
+
+/**
+ * INT-8: `cancel()` defaulted to an IMMEDIATE cancel, while the server defaults to period end
+ * (`at_period_end` absent → true). A bare `cancel($org)` cut a paying customer off mid-period.
+ */
+it('cancels at period end by default', function (): void {
+    Http::fake([
+        'billing.test/api/v1/subscriptions/org_a/cancel' => Http::response(
+            ['plan' => 'pro', 'status' => 'active', 'renews_at' => null],
+        ),
+    ]);
+
+    $management = new BillingManagement(makeHttpManagement());
+    $subscription = $management->cancel('org_a');
+
+    Http::assertSent(fn ($request): bool => $request['at_period_end'] === true);
+    expect($subscription->cancelsAtPeriodEnd())->toBeTrue();
+});
+
+it('cancels immediately only when asked to', function (): void {
+    Http::fake([
+        'billing.test/api/v1/subscriptions/org_a/cancel' => Http::response(
+            ['plan' => 'pro', 'status' => 'canceled', 'renews_at' => null],
+        ),
+    ]);
+
+    (new BillingManagement(makeHttpManagement()))->cancel('org_a', atPeriodEnd: false);
+
+    Http::assertSent(fn ($request): bool => $request['at_period_end'] === false);
 });

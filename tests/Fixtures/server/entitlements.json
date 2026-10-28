@@ -1,0 +1,10 @@
+{
+    "source": "app/Http/Controllers/Api/EntitlementController.php + app/Billing/Metering/EntitlementsView.php",
+    "request": "GET /api/v1/entitlements/{org}",
+    "status": 200,
+    "body": {"meters": {
+        "api.calls": {"enabled": true, "allowance": 1000, "weight": 1.5, "overage": "block"},
+        "seats": {"enabled": true, "allowance": null, "weight": 1.0, "overage": "bill"},
+        "storage.gb": {"enabled": false, "allowance": null, "weight": null, "overage": "block"}
+    }}
+}

@@ -1,0 +1,10 @@
+{
+    "source": "app/Http/Controllers/Api/Management/UsageController.php + UsageSummaryView::forOrganization",
+    "request": "GET /api/v1/usage/{org}",
+    "status": 200,
+    "body": {"period": {"start": "2026-10-01T00:00:00+00:00", "end": "2026-10-31T23:59:59+00:00", "elapsed_fraction": 0.8871},
+        "meters": {
+            "api.calls": {"used": 750, "allowance": 1000, "overage": 0, "projected": 845, "projected_overage": 0},
+            "seats": {"used": 4, "allowance": null, "overage": 0, "projected": 4, "projected_overage": 0}
+        }}
+}

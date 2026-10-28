@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -216,4 +217,25 @@ it('parses the nested price shape the live catalog endpoint returns', function (
     expect($plans[0]->priceMinor)->toBe(19_900)
         ->and($plans[0]->currency)->toBe('USD')
         ->and($plans[0]->entitlement('conversations')?->weight)->toBe(0.03);
+});
+
+/**
+ * INT-1: the server answers 404 for an org with no subscription
+ * (`SubscriptionController::show`). The transport threw, so a brand-new organization could not
+ * even render a billing page to subscribe from. The fake returned null; now both do.
+ */
+it('reads the 404 for an organization with no subscription as null', function (): void {
+    Http::fake([
+        'billing.test/api/v1/subscriptions/org_new' => Http::response(['error' => 'This organization has no active subscription.'], 404),
+    ]);
+
+    expect(makeHttpManagement()->subscription('org_new'))->toBeNull();
+});
+
+it('still refuses a subscription read the token may not make', function (): void {
+    Http::fake([
+        'billing.test/api/v1/subscriptions/org_b' => Http::response(['error' => 'This token is not permitted to act for the requested organization.'], 403),
+    ]);
+
+    expect(fn () => makeHttpManagement()->subscription('org_b'))->toThrow(BillingRefused::class);
 });

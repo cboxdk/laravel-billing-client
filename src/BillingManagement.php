@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
@@ -38,7 +40,7 @@ class BillingManagement
      *
      * @return list<Plan>
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function plans(?string $currency = null): array
     {
@@ -51,7 +53,7 @@ class BillingManagement
      *
      * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null}  $attributes
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function ensureOrganization(string $org, array $attributes): void
     {
@@ -61,7 +63,7 @@ class BillingManagement
     /**
      * The organization's current subscription, or null when it has none.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function subscription(string $org): ?Subscription
     {
@@ -72,7 +74,7 @@ class BillingManagement
      * Subscribe `org` to `plan`, returning the subscription and any payment intent to
      * confirm.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function subscribe(string $org, string $plan): SubscriptionResult
     {
@@ -83,7 +85,7 @@ class BillingManagement
      * Preview switching `org` to `plan` without applying it — the due-now, credit, new
      * recurring amount, and itemized lines to show the user before they commit.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function previewChange(string $org, string $plan): ChangePreview
     {
@@ -98,7 +100,7 @@ class BillingManagement
      * the proration lines. This signature previously claimed a Subscription that the endpoint has
      * never returned, so the method threw on every call.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function changePlan(string $org, string $plan): ChangePreview
     {
@@ -106,12 +108,15 @@ class BillingManagement
     }
 
     /**
-     * Cancel `org`'s subscription. By default it cancels immediately; pass
-     * `$atPeriodEnd` to let it run to the end of the paid period.
+     * Cancel `org`'s subscription. By default it runs to the end of the paid period, the
+     * same default the server applies; pass `atPeriodEnd: false` to end it now.
      *
-     * @throws TransportException on an infrastructure fault
+     * Before 0.4.0 the default was immediate, which cut a paying customer off mid-period.
+     *
+     * @throws BillingRefused when billing refuses (no subscription → 404)
+     * @throws BillingUnavailable when billing cannot answer
      */
-    public function cancel(string $org, bool $atPeriodEnd = false): Subscription
+    public function cancel(string $org, bool $atPeriodEnd = true): Subscription
     {
         return $this->transport->cancel($org, $atPeriodEnd);
     }
@@ -119,7 +124,7 @@ class BillingManagement
     /**
      * The organization's current-period usage per meter.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function usage(string $org): UsageSummary
     {
@@ -131,7 +136,7 @@ class BillingManagement
      *
      * @return list<Invoice>
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function invoices(string $org): array
     {
@@ -143,7 +148,7 @@ class BillingManagement
      * returning the `url` to redirect to and when it expires. Optionally price it in
      * `$currency`.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
     {
@@ -154,7 +159,7 @@ class BillingManagement
      * Open a billing-portal session (ADR-0009 path A) for `org`, returning the `url` to
      * redirect the user to.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createPortalSession(string $org, string $returnUrl): PortalSession
     {
@@ -166,7 +171,7 @@ class BillingManagement
      * with no immediate charge. Returns the `{gateway, publishableKey, clientSecret}` the
      * front-end mounts the gateway element with.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createSetupIntent(string $org): SetupIntent
     {
@@ -178,7 +183,7 @@ class BillingManagement
      * existing `$reference` (e.g. an open invoice) or an ad-hoc `$amountMinor` in
      * `$currency`; at least one must be given.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createPaymentIntent(string $org, ?string $reference = null, ?int $amountMinor = null, ?string $currency = null): PaymentIntent
     {
@@ -190,7 +195,7 @@ class BillingManagement
      *
      * @return list<PaymentMethod>
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function paymentMethods(string $org): array
     {
@@ -200,7 +205,7 @@ class BillingManagement
     /**
      * Make payment method `$id` the default for `org`.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function setDefaultPaymentMethod(string $org, string $id): void
     {
@@ -210,7 +215,7 @@ class BillingManagement
     /**
      * Remove payment method `$id` from `org`.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function removePaymentMethod(string $org, string $id): void
     {

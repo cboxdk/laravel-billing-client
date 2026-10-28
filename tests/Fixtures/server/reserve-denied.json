@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/ReserveController.php::__invoke (Denied)",
+    "request": "POST /api/v1/reserve",
+    "status": 200,
+    "body": {"outcome": "denied", "reason": "disabled_meter"}
+}

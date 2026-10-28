@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Middleware/AuthenticateApiToken.php::handle",
+    "request": "any /api/v1 route with a missing, invalid or revoked token",
+    "status": 401,
+    "body": {"error": "Invalid API token."}
+}
