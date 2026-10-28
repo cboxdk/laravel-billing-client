@@ -1,7 +1,7 @@
 {
     "bomFormat": "CycloneDX",
     "specVersion": "1.5",
-    "serialNumber": "urn:uuid:38e4c45f-30c0-4411-92bf-41aaa004204a",
+    "serialNumber": "urn:uuid:e493ffc3-3e6c-4e65-a1ea-b1c13612cdf2",
     "version": 1,
     "metadata": {
         "tools": [
@@ -357,11 +357,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/league/uri@7.9.0",
+            "bom-ref": "pkg:composer/league/uri@7.9.1",
             "group": "league",
             "name": "uri",
-            "version": "7.9.0",
-            "purl": "pkg:composer/league/uri@7.9.0",
+            "version": "7.9.1",
+            "purl": "pkg:composer/league/uri@7.9.1",
             "description": "URI manipulation library",
             "licenses": [
                 {
@@ -373,11 +373,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/league/uri-interfaces@7.9.0",
+            "bom-ref": "pkg:composer/league/uri-interfaces@7.9.1",
             "group": "league",
             "name": "uri-interfaces",
-            "version": "7.9.0",
-            "purl": "pkg:composer/league/uri-interfaces@7.9.0",
+            "version": "7.9.1",
+            "purl": "pkg:composer/league/uri-interfaces@7.9.1",
             "description": "Common tools for parsing and resolving RFC3987/RFC3986 URI",
             "licenses": [
                 {
@@ -849,11 +849,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/polyfill-intl-grapheme@v1.43.0",
+            "bom-ref": "pkg:composer/symfony/polyfill-intl-grapheme@v1.43.3",
             "group": "symfony",
             "name": "polyfill-intl-grapheme",
-            "version": "v1.43.0",
-            "purl": "pkg:composer/symfony/polyfill-intl-grapheme@v1.43.0",
+            "version": "v1.43.3",
+            "purl": "pkg:composer/symfony/polyfill-intl-grapheme@v1.43.3",
             "description": "Symfony polyfill for intl's grapheme_* functions",
             "licenses": [
                 {
@@ -897,11 +897,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/polyfill-mbstring@v1.43.0",
+            "bom-ref": "pkg:composer/symfony/polyfill-mbstring@v1.43.3",
             "group": "symfony",
             "name": "polyfill-mbstring",
-            "version": "v1.43.0",
-            "purl": "pkg:composer/symfony/polyfill-mbstring@v1.43.0",
+            "version": "v1.43.3",
+            "purl": "pkg:composer/symfony/polyfill-mbstring@v1.43.3",
             "description": "Symfony polyfill for the Mbstring extension",
             "licenses": [
                 {
