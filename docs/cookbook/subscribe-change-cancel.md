@@ -8,7 +8,8 @@ description: The plan lifecycle a product app exposes to its users — subscribe
 
 These recipes drive the [management client](../core-concepts/management-client.md) to
 build a self-service billing screen. Every method returns an immutable value object and
-throws `TransportException` on an outage, so a controller stays thin: resolve, delegate,
+throws a `TransportException` (`BillingRefused` or `BillingUnavailable`, see
+[Errors](../core-concepts/errors.md)) when it cannot answer, so a controller stays thin: resolve, delegate,
 map.
 
 ## Show the plans and the current subscription
@@ -67,11 +68,12 @@ $subscription = BillingManager::changePlan($org, 'scale');
 
 ## Cancel
 
-Cancel immediately, or let the subscription run to the end of the paid period:
+Let the subscription run to the end of the paid period (the default since 0.4.0, and the
+server's own default), or end it now:
 
 ```php
-BillingManager::cancel($org);                       // immediate
-BillingManager::cancel($org, atPeriodEnd: true);    // lapse at period end
+BillingManager::cancel($org);                       // lapse at period end
+BillingManager::cancel($org, atPeriodEnd: false);   // immediate
 
 // A period-end cancellation stays `active` with no renewal scheduled:
 $sub = BillingManager::subscription($org);

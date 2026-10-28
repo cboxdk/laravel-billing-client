@@ -21,6 +21,11 @@ stranded capacity instead of leaking it permanently.
 
 - `reserve()` takes the units **and** records the hold (per-meter lease-backed amounts +
   an expiry) in the registry.
+- Whoever closes a hold first owns its units. The sweeper and a late `commit()` /
+  `release()` race for the same close and exactly one wins, so a hold that outlives its
+  TTL is never credited back twice. A late commit after the sweep takes the units it used
+  back out of the slice, best-effort; billing's cumulative ledger records the usage
+  either way.
 - `commit()` / `release()` settle the units **and** close the registry entry — a settled
   reservation is never swept.
 - The `billing:sweep-reservations` command reclaims every hold past its TTL, returning

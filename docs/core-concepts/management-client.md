@@ -26,7 +26,7 @@ BillingManager::ensureOrganization('org_42', [
 
 $plans = BillingManager::plans('USD');                  // list<Plan>, priced in USD
 $current = BillingManager::subscription('org_42');      // ?Subscription
-$result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult (+ payment intent?)
+$result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult (payment intent: null today)
 $preview = BillingManager::previewChange('org_42', 'scale');
 $updated = BillingManager::changePlan('org_42', 'scale');
 $canceled = BillingManager::cancel('org_42', atPeriodEnd: true);
@@ -37,8 +37,8 @@ $invoices = BillingManager::invoices('org_42');         // list<Invoice>
 ## Provision the organization first
 
 `subscribe`, `changePlan`, and checkout all act on an organization that must already
-exist on the billing service — calling them for an unknown org returns a
-`TransportException` (404 "Unknown organization"). `ensureOrganization($org, $attributes)`
+exist on the billing service — calling them for an unknown org throws a
+`BillingRefused` (404 "Unknown organization"). `ensureOrganization($org, $attributes)`
 is an idempotent upsert (`PUT /api/v1/organizations/{org}`); call it once before the
 first billing action for a customer. It's the first step in every cookbook below.
 
@@ -102,11 +102,13 @@ gateway element client-side.
 
 ## Deny-by-default on outages
 
-A management call that cannot complete — connection error, non-2xx, or malformed body —
-throws a `TransportException` and **never fabricates a result**. A caller can never
-mistake an unreachable service for "no subscription" or "no invoices". Reads that
-legitimately have no answer (an org with no subscription) return `null`, distinct from an
-error.
+A management call that cannot complete **never fabricates a result**. A refusal (a 4xx
+other than 408/429: a revoked token, an unknown plan, a validation error) throws
+`BillingRefused`; a connection error, 5xx, 408, 429 or malformed body throws
+`BillingUnavailable`. Both are `TransportException`s and carry the status, body and
+`Retry-After` — see [Errors](errors.md). A caller can never mistake an unreachable service
+for "no subscription" or "no invoices". The one read that legitimately has no answer, an
+org with no subscription (a 404), returns `null`, distinct from an error.
 
 ## Typed value objects
 
