@@ -239,3 +239,11 @@ it('still refuses a subscription read the token may not make', function (): void
 
     expect(fn () => makeHttpManagement()->subscription('org_b'))->toThrow(BillingRefused::class);
 });
+
+it('throws on a route 404, which means a wrong base URL rather than no subscription', function (): void {
+    Http::fake([
+        'billing.test/api/v1/subscriptions/org_new' => Http::response(['message' => 'The route api/v1/subscriptions/org_new could not be found.'], 404),
+    ]);
+
+    expect(fn () => makeHttpManagement()->subscription('org_new'))->toThrow(BillingRefused::class);
+});

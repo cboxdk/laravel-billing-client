@@ -76,14 +76,16 @@ class HttpManagementTransport implements ManagementTransport
      * The server answers 404 for an organization with no serving subscription
      * (`SubscriptionController::show`). That is the normal state of a brand-new
      * organization, so it reads as null. Throwing on it meant a new organization could not
-     * even load the page it subscribes from. Every other refusal (401, 403) still throws.
+     * even load the page it subscribes from. Every other refusal (401, 403) still throws,
+     * and so does a 404 without the controller's `{error}` body: that is a route 404 from a
+     * wrong base URL or an older server, not an answer.
      */
     public function subscription(string $org): ?Subscription
     {
         try {
             $body = $this->get('/api/v1/subscriptions/'.rawurlencode($org));
         } catch (BillingRefused $e) {
-            if ($e->status === 404) {
+            if ($e->status === 404 && $this->isControllerNotFound($e->body)) {
                 return null;
             }
 
@@ -536,6 +538,14 @@ class HttpManagementTransport implements ManagementTransport
         }
 
         return $this->decode($response->json(), $path);
+    }
+
+    /** True when a 404 body is the controller's `{"error": "..."}`, not Laravel's route 404. */
+    private function isControllerNotFound(?string $body): bool
+    {
+        $decoded = json_decode((string) $body, true);
+
+        return is_array($decoded) && is_string($decoded['error'] ?? null);
     }
 
     private function request(): PendingRequest

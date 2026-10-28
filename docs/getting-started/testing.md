@@ -73,7 +73,7 @@ their shape. The contract suite checks the fixtures against a running server.
 
 It runs the real HTTP transports against a server you point it at, and fails on any field
 a fixture has that the server no longer sends. It is skipped unless both variables are
-set, and it refuses a live (`cbl_`) token, because it writes: it provisions an
+set, and it refuses any token that is not a sandbox (`cbt_`) token, because it writes: it provisions an
 organization and, with a plan, subscribes and cancels it. Use a sandbox (`cbt_`) token.
 CI never runs it against production.
 

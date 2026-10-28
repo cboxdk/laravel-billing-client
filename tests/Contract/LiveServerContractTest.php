@@ -22,8 +22,8 @@ use Illuminate\Http\Client\Factory as HttpFactory;
  * live response held to the recorded fixtures in `tests/Fixtures/server`. It is what proves the
  * fixtures (and so the fakes built on them) still match the server.
  *
- * Skipped unless BILLING_CONTRACT_URL and BILLING_CONTRACT_TOKEN are set. It refuses a live
- * token (`cbl_…`): run it with a SANDBOX token (`cbt_…`) only. It writes to that sandbox: it
+ * Skipped unless BILLING_CONTRACT_URL and BILLING_CONTRACT_TOKEN are set. It refuses any
+ * token that is not a SANDBOX token (`cbt_…`). It writes to that sandbox: it
  * provisions an organization and, with BILLING_CONTRACT_PLAN, subscribes and cancels it.
  *
  *   BILLING_CONTRACT_URL     base URL, e.g. https://app.cboxbilling.com
@@ -99,8 +99,8 @@ beforeEach(function (): void {
         $this->markTestSkipped('Set BILLING_CONTRACT_URL and BILLING_CONTRACT_TOKEN to run the contract suite.');
     }
 
-    if (str_starts_with(contractToken(), 'cbl_')) {
-        $this->fail('The contract suite writes to the server it runs against. Use a sandbox (cbt_) token, never a live one.');
+    if (! str_starts_with(contractToken(), 'cbt_')) {
+        $this->fail('The contract suite writes to the server it runs against. Use a sandbox (cbt_) token only.');
     }
 });
 
