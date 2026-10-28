@@ -10,6 +10,8 @@ use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Contracts\ReservationRegistry;
 use Cbox\Billing\Client\Contracts\UsageBuffer;
 use Cbox\Billing\Client\Enums\FailurePolicy;
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\QuotaExceeded;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Leasing\LeaseManager;
@@ -54,9 +56,13 @@ use Throwable;
  * Failure handling splits by CAUSE (mirroring the engine's ADR-0004):
  *  - An EXHAUSTED allowance (billing granted zero) is a SEMANTIC hard limit and always
  *    fails closed — {@see QuotaExceeded}, regardless of the failure policy.
- *  - An UNREACHABLE billing service is an INFRASTRUCTURE fault, resolved by the
- *    deployment's {@see FailurePolicy}: fail-open admits the request best-effort (usage
- *    is still buffered and reconciled later); fail-closed surfaces the transport error.
+ *  - An UNREACHABLE billing service ({@see BillingUnavailable}: connection error, 5xx,
+ *    429) is an INFRASTRUCTURE fault, resolved by the deployment's {@see FailurePolicy}:
+ *    fail-open admits the request best-effort (usage is still buffered and reconciled
+ *    later); fail-closed surfaces the error.
+ *  - A REFUSAL ({@see BillingRefused}: a 4xx such as a revoked token) is a decision and
+ *    always fails closed. Before 0.4.0 it was mistaken for an outage, so a revoked token
+ *    under the default `allow` policy admitted everything.
  */
 class BillingClient
 {
@@ -101,7 +107,8 @@ class BillingClient
      * @return ($meter is array ? ReservationSet : Reservation)
      *
      * @throws QuotaExceeded when a meter's central allowance is exhausted (the hard limit)
-     * @throws TransportException when billing is unreachable AND the failure policy is fail-closed
+     * @throws BillingRefused when billing refuses the refill (a 4xx such as a revoked token), whatever the policy
+     * @throws BillingUnavailable when billing is unreachable AND the failure policy is fail-closed
      * @throws InvalidArgumentException when an estimate is not positive or the set is empty
      */
     public function reserve(string $org, string|array $meter, ?int $estimate = null): Reservation|ReservationSet
@@ -150,6 +157,12 @@ class BillingClient
     /** Release a held reservation without charging (error paths). */
     public function release(Reservation|ReservationSet $reservation): void
     {
+        // A hold the sweeper already reclaimed has had its units returned; returning them
+        // again would credit the slice twice. Whoever closes the hold owns the give-back.
+        if (! $this->closeReservation($reservation->id)) {
+            return;
+        }
+
         if ($reservation instanceof ReservationSet) {
             foreach ($reservation->buckets as $bucket) {
                 if ($bucket->backedByLease && $bucket->amount > 0) {
@@ -157,16 +170,12 @@ class BillingClient
                 }
             }
 
-            $this->closeReservation($reservation->id);
-
             return;
         }
 
         if ($reservation->backedByLease) {
             $this->store->giveBack($reservation->org, $reservation->meter, $reservation->amount);
         }
-
-        $this->closeReservation($reservation->id);
     }
 
     /**
@@ -187,8 +196,11 @@ class BillingClient
 
         try {
             $this->leases->refill($org, $meter, $n);
-        } catch (TransportException) {
+        } catch (BillingUnavailable) {
             return $this->failurePolicy->admitsOnOutage();
+        } catch (TransportException) {
+            // A refusal (or an unclassified fault) is never an outage to fail open on.
+            return false;
         }
 
         return $this->store->remaining($org, $meter) >= $n;
@@ -216,7 +228,7 @@ class BillingClient
      * prefer caching the {@see Entitlements} and calling `cost()` on it in a hot loop.
      * An unknown/unentitled meter has no weight and costs nothing (deny-by-default).
      *
-     * @throws TransportException on an infrastructure fault reading entitlements
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer reading entitlements
      */
     public function cost(string $org, string $meter, int $units): float
     {
@@ -230,7 +242,7 @@ class BillingClient
      *
      * @param  list<MeterEstimate>  $meters
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function reserveRemote(string $org, array $meters): RemoteReservation
     {
@@ -242,7 +254,7 @@ class BillingClient
      *
      * @param  list<MeterActual>  $actuals
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function commitRemote(string $reservationId, array $actuals): void
     {
@@ -252,7 +264,7 @@ class BillingClient
     /**
      * Read `org`'s entitlement set from billing (`GET /api/v1/entitlements/{org}`).
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function entitlements(string $org): Entitlements
     {
@@ -319,9 +331,10 @@ class BillingClient
 
     /**
      * Hold one bucket against its meter's local lease. Returns the hold on success;
-     * throws {@see QuotaExceeded} (exhausted allowance) or {@see TransportException}
-     * (unreachable, fail-closed) so a multi-meter set can roll the whole thing back. A
-     * fail-open outage returns an unbacked hold rather than throwing.
+     * throws {@see QuotaExceeded} (exhausted allowance), {@see BillingRefused} (billing
+     * said no) or {@see BillingUnavailable} (unreachable, fail-closed) so a multi-meter
+     * set can roll the whole thing back. Only a fail-open OUTAGE returns an unbacked hold
+     * rather than throwing; a refusal never does.
      */
     private function holdBucket(string $org, string $meter, int $estimate): BucketHold
     {
@@ -331,7 +344,13 @@ class BillingClient
 
         try {
             $taken = $this->holdLease($org, $meter, $estimate);
-        } catch (TransportException $e) {
+        } catch (BillingRefused $e) {
+            // Billing answered and said no (a revoked token, a forbidden org). A decision,
+            // not an outage: fail closed whatever the policy.
+            $this->signals->denied($org, $meter, $estimate, 'billing_refused');
+
+            throw $e;
+        } catch (BillingUnavailable $e) {
             // Infrastructure fault refilling the lease — resolve by policy, not silently.
             if ($this->failurePolicy->admitsOnOutage()) {
                 // Fail open: admit best-effort. No local units were taken, so the hold
@@ -375,17 +394,41 @@ class BillingClient
             throw new InvalidArgumentException('Committed amount must be between 0 and the reserved estimate.');
         }
 
-        $leftover = $reservation->amount - $actual;
+        $owned = $this->closeReservation($reservation->id);
 
-        if ($reservation->backedByLease && $leftover > 0) {
-            $this->store->giveBack($reservation->org, $reservation->meter, $leftover);
+        if ($reservation->backedByLease) {
+            $this->settleBucket($reservation->org, $reservation->meter, $reservation->amount, $actual, $owned);
         }
 
         if ($actual > 0) {
             $this->buffer->record($reservation->org, $reservation->meter, $actual);
         }
+    }
 
-        $this->closeReservation($reservation->id);
+    /**
+     * Square the local slice for one lease-backed bucket on commit.
+     *
+     * When this commit closed the hold (`$owned`), the unused part goes back. When the
+     * sweeper closed it first (the request outlived the reservation TTL), the sweeper has
+     * already returned the WHOLE hold, so nothing more is given back and the units this
+     * request did use are taken out again, best-effort. Giving the leftover back here as
+     * well is the double credit-back that inflated the slice past what billing leased.
+     */
+    private function settleBucket(string $org, string $meter, int $held, int $actual, bool $owned): void
+    {
+        if ($owned) {
+            if ($held - $actual > 0) {
+                $this->store->giveBack($org, $meter, $held - $actual);
+            }
+
+            return;
+        }
+
+        if ($actual > 0) {
+            // If the slice was spent meanwhile this cannot be undone locally; billing's
+            // cumulative ledger still records the usage below.
+            $this->store->tryTake($org, $meter, $actual);
+        }
     }
 
     /**
@@ -407,20 +450,19 @@ class BillingClient
             }
         }
 
+        $owned = $this->closeReservation($set->id);
+
         foreach ($set->buckets as $bucket) {
             $actual = $actuals[$bucket->meter];
-            $leftover = $bucket->amount - $actual;
 
-            if ($bucket->backedByLease && $leftover > 0) {
-                $this->store->giveBack($set->org, $bucket->meter, $leftover);
+            if ($bucket->backedByLease) {
+                $this->settleBucket($set->org, $bucket->meter, $bucket->amount, $actual, $owned);
             }
 
             if ($actual > 0) {
                 $this->buffer->record($set->org, $bucket->meter, $actual);
             }
         }
-
-        $this->closeReservation($set->id);
     }
 
     /**
@@ -435,18 +477,23 @@ class BillingClient
         $this->registry->open($id, $org, $holds, ($this->clock)() + $this->reservationTtl * 1000);
     }
 
-    private function closeReservation(string $id): void
+    /**
+     * Close a held reservation. True when this call closed it and so owns the give-back;
+     * false when the sweeper (or an earlier settle) already did. With no registry there is
+     * no sweeper, so the caller always owns it.
+     */
+    private function closeReservation(string $id): bool
     {
-        $this->registry?->close($id);
+        return $this->registry === null || $this->registry->close($id);
     }
 
     /**
      * Take `$amount` from the local lease, refilling once from billing if the slice is
      * short. Returns true when taken, false when the central allowance is exhausted; a
-     * {@see TransportException} propagates when billing is unreachable during the needed
-     * refill.
+     * {@see TransportException} propagates when billing refuses or cannot be reached
+     * during the needed refill.
      *
-     * @throws TransportException when billing cannot be reached to refill
+     * @throws TransportException when billing refuses or cannot be reached to refill
      */
     private function holdLease(string $org, string $meter, int $amount): bool
     {

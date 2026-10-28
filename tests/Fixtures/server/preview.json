@@ -1,0 +1,9 @@
+{
+    "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::preview + presentPreview",
+    "request": "POST /api/v1/subscriptions/{org}/preview",
+    "status": 200,
+    "body": {"due_now_minor": 2400, "credit_minor": 2500, "new_recurring_minor": 4900,
+        "effective_at": "2026-10-28T12:00:00+00:00",
+        "credit_delta": {"forfeited": 0, "granted": 0, "carried": 0},
+        "lines": [{"description": "Pro plan", "minor": 4900}, {"description": "Unused time on Starter", "minor": -2500}]}
+}

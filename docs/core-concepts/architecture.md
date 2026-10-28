@@ -23,7 +23,8 @@ component that touches the network is the transport.
 
 `Http\HttpBillingTransport` speaks real HTTP with a bearer token and is
 **deny-by-default** about responses: any non-2xx, connection error, or malformed body
-raises a `TransportException` rather than fabricating a success.
+raises a `TransportException` rather than fabricating a success: `BillingRefused` when
+billing said no, `BillingUnavailable` when it could not answer (see [Errors](errors.md)).
 `Testing\FakeBillingTransport` implements the same contract in memory.
 
 ## Local collaborators

@@ -65,8 +65,8 @@ return redirect()->away($portal->url);
 
 ## Deny-by-default
 
-Both calls throw `TransportException` if the management API is unreachable, returns a
-non-2xx, or sends a malformed body — the SDK never fabricates a session URL. An unknown
+Both calls throw a `TransportException` if the management API is unreachable
+(`BillingUnavailable`), refuses the call (`BillingRefused`), or sends a malformed body — the SDK never fabricates a session URL. An unknown
 plan on checkout is refused the same way. Let the exception surface; do not redirect to a
 guessed URL.
 

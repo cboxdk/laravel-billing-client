@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/Management/OrganizationController.php::upsert",
+    "request": "PUT /api/v1/organizations/{org}",
+    "status": 201,
+    "body": {"organization": {"id": "org_a", "external_ref": null, "name": "Acme", "billing_email": "billing@acme.test", "billing_country": "DK", "billing_currency": "EUR"}}
+}

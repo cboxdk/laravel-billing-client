@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/UsageController.php::__invoke",
+    "request": "POST /api/v1/usage",
+    "status": 200,
+    "body": {"ok": true, "accepted": 1}
+}

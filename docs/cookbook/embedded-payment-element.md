@@ -109,7 +109,7 @@ BillingManager::removePaymentMethod($org, 'pm_1');
 
 `PaymentMethod` carries only the gateway-safe descriptor — brand, last four, expiry — never
 a full number or CVC. A re-default or removal of an unknown id is refused with a
-`TransportException`, as is any outage.
+`BillingRefused` (404); an outage throws `BillingUnavailable`.
 
 ## Testing offline
 

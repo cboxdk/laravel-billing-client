@@ -31,8 +31,13 @@ interface ReservationRegistry
      */
     public function open(string $id, string $org, array $holds, int $expiresAt): void;
 
-    /** Remove a settled reservation; a no-op when it is unknown (already swept). */
-    public function close(string $id): void;
+    /**
+     * Close a held reservation. Returns true only for the ONE call that closed an open
+     * hold; false when it is unknown or already closed (swept, settled, or closed by a
+     * concurrent caller). The closer owns the give-back of its units, so this is what stops
+     * a hold being credited back twice. Implementations must make the claim atomic.
+     */
+    public function close(string $id): bool;
 
     /**
      * Every held reservation whose TTL has passed at `$now` (millisecond epoch), for

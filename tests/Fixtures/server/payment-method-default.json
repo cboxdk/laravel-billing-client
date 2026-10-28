@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/Management/PaymentMethodController.php::setDefault",
+    "request": "POST /api/v1/payment-methods/{org}/default",
+    "status": 200,
+    "body": {"data": [{"id": "pm_1", "brand": "visa", "last4": "4242", "exp_month": 12, "exp_year": 2030, "is_default": true}]}
+}

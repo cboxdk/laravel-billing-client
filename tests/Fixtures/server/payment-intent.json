@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/Management/PaymentIntentController.php::__invoke",
+    "request": "POST /api/v1/payment-intents",
+    "status": 201,
+    "body": {"gateway": "stripe", "publishable_key": "pk_test_1", "client_secret": "pi_1_secret_2", "status": "requires_confirmation", "reference": "pi_1"}
+}

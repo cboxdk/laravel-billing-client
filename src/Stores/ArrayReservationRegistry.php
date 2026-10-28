@@ -26,9 +26,15 @@ class ArrayReservationRegistry implements ReservationRegistry
         $this->pending[$id] = new PendingReservation($id, $org, $holds, $expiresAt);
     }
 
-    public function close(string $id): void
+    public function close(string $id): bool
     {
+        if (! isset($this->pending[$id])) {
+            return false;
+        }
+
         unset($this->pending[$id]);
+
+        return true;
     }
 
     public function expired(int $now): array

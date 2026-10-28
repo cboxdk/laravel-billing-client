@@ -22,6 +22,9 @@ use Illuminate\Contracts\Cache\Repository;
  */
 class CacheReservationRegistry implements ReservationRegistry
 {
+    /** Seconds a close claim is kept; far past any sweep cadence, so a repeat close stays false. */
+    private const int CLAIM_TTL = 86_400;
+
     public function __construct(
         private readonly Repository $cache,
         private readonly string $prefix = 'cbox-billing-client:pending:',
@@ -37,10 +40,25 @@ class CacheReservationRegistry implements ReservationRegistry
         $this->remember($id);
     }
 
-    public function close(string $id): void
+    /**
+     * Claims the close with an atomic `add` on a per-hold key, so of a sweeper and a late
+     * commit racing for the same hold exactly one gets true. `add` is atomic on the
+     * Redis, Memcached, database and array stores.
+     */
+    public function close(string $id): bool
     {
+        if ($id === '' || $this->cache->get($this->recordKey($id)) === null) {
+            return false;
+        }
+
+        if (! $this->cache->add($this->claimKey($id), 1, self::CLAIM_TTL)) {
+            return false;
+        }
+
         $this->cache->forget($this->recordKey($id));
         $this->forgetIndex($id);
+
+        return true;
     }
 
     public function expired(int $now): array
@@ -165,6 +183,11 @@ class CacheReservationRegistry implements ReservationRegistry
     private function recordKey(string $id): string
     {
         return $this->prefix.$id;
+    }
+
+    private function claimKey(string $id): string
+    {
+        return $this->prefix.'closed:'.$id;
     }
 
     private function indexKey(): string

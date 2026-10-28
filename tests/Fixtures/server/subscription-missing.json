@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::show (no serving subscription)",
+    "request": "GET /api/v1/subscriptions/{org}",
+    "status": 404,
+    "body": {"error": "This organization has no active subscription."}
+}

@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/Management/SetupIntentController.php::__invoke",
+    "request": "POST /api/v1/setup-intents",
+    "status": 201,
+    "body": {"gateway": "stripe", "publishable_key": "pk_test_1", "client_secret": "seti_1_secret_2", "status": "requires_payment_method", "reference": "seti_1"}
+}

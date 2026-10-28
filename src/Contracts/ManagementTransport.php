@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client\Contracts;
 
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Cbox\Billing\Client\Testing\FakeManagementTransport;
@@ -32,7 +34,9 @@ use Cbox\Billing\Client\ValueObjects\UsageSummary;
  *
  * Deny-by-default: a method that cannot complete — network error, non-2xx, or
  * malformed body — throws a {@see TransportException} and never fabricates a success,
- * so a caller cannot mistake an outage for an entitlement.
+ * so a caller cannot mistake an outage for an entitlement. It throws the subclass that
+ * fits the cause: {@see BillingRefused} for a 4xx other than 408/429,
+ * {@see BillingUnavailable} for everything else.
  */
 interface ManagementTransport
 {
@@ -42,7 +46,7 @@ interface ManagementTransport
      *
      * @return list<Plan>
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function plans(?string $currency = null): array;
 
@@ -54,15 +58,16 @@ interface ManagementTransport
      *
      * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null}  $attributes
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function ensureOrganization(string $org, array $attributes): void;
 
     /**
      * The organization's current subscription (`GET /api/v1/subscriptions/{org}`), or
-     * null when it has none.
+     * null when it has none. The server answers that case with a 404, which an
+     * implementation must return as null rather than throw.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function subscription(string $org): ?Subscription;
 
@@ -70,7 +75,7 @@ interface ManagementTransport
      * Subscribe `org` to `plan` (`POST /api/v1/subscriptions`), returning the new
      * subscription and any payment intent to confirm.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function subscribe(string $org, string $plan): SubscriptionResult;
 
@@ -78,7 +83,7 @@ interface ManagementTransport
      * Preview switching `org` to `plan` without applying it
      * (`POST /api/v1/subscriptions/{org}/preview`).
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function previewChange(string $org, string $plan): ChangePreview;
 
@@ -86,7 +91,7 @@ interface ManagementTransport
      * Change `org` to `plan` (`POST /api/v1/subscriptions/{org}/change`), returning the
      * updated subscription.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function changePlan(string $org, string $plan): ChangePreview;
 
@@ -94,14 +99,14 @@ interface ManagementTransport
      * Cancel `org`'s subscription (`POST /api/v1/subscriptions/{org}/cancel`);
      * `$atPeriodEnd` cancels at period end rather than immediately.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function cancel(string $org, bool $atPeriodEnd): Subscription;
 
     /**
      * The organization's current-period usage per meter (`GET /api/v1/usage/{org}`).
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function usage(string $org): UsageSummary;
 
@@ -110,7 +115,7 @@ interface ManagementTransport
      *
      * @return list<Invoice>
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function invoices(string $org): array;
 
@@ -119,7 +124,7 @@ interface ManagementTransport
      * up `plan`, redirecting to `returnUrl` when done and optionally pricing in
      * `$currency`. Path A of ADR-0009: billing collects payment on its own pages.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession;
 
@@ -128,7 +133,7 @@ interface ManagementTransport
      * to `returnUrl` when the user leaves. Path A of ADR-0009: billing hosts the
      * self-service portal.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createPortalSession(string $org, string $returnUrl): PortalSession;
 
@@ -137,7 +142,7 @@ interface ManagementTransport
      * payment method with no immediate charge. Path B of ADR-0009: the front-end mounts
      * the gateway element with the returned `{gateway, publishableKey, clientSecret}`.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createSetupIntent(string $org): SetupIntent;
 
@@ -147,7 +152,7 @@ interface ManagementTransport
      * `$amountMinor` in `$currency` — at least one must be given. Path B of ADR-0009: the
      * front-end confirms the returned `clientSecret` and a webhook confirms settlement.
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function createPaymentIntent(string $org, ?string $reference = null, ?int $amountMinor = null, ?string $currency = null): PaymentIntent;
 
@@ -157,7 +162,7 @@ interface ManagementTransport
      *
      * @return list<PaymentMethod>
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function paymentMethods(string $org): array;
 
@@ -165,7 +170,7 @@ interface ManagementTransport
      * Make payment method `$id` the default for `org`
      * (`POST /api/v1/payment-methods/{org}/default`).
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function setDefaultPaymentMethod(string $org, string $id): void;
 
@@ -173,7 +178,7 @@ interface ManagementTransport
      * Remove payment method `$id` from `org`
      * (`DELETE /api/v1/payment-methods/{org}/{id}`).
      *
-     * @throws TransportException on an infrastructure fault
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function removePaymentMethod(string $org, string $id): void;
 }

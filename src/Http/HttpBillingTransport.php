@@ -6,6 +6,8 @@ namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BillingTransport;
 use Cbox\Billing\Client\Enums\ReserveOutcome;
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\CumulativeUsage;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
@@ -14,16 +16,19 @@ use Cbox\Billing\Client\ValueObjects\LeaseGrant;
 use Cbox\Billing\Client\ValueObjects\MeterActual;
 use Cbox\Billing\Client\ValueObjects\MeterEstimate;
 use Cbox\Billing\Client\ValueObjects\RemoteReservation;
+use DateTimeImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
+use Throwable;
 
 /**
  * The real {@see BillingTransport}: it speaks the Cbox Billing HTTP API with a bearer
  * token over Laravel's HTTP client. It is deny-by-default about responses — any
  * non-2xx status, connection error, or malformed body raises a
- * {@see TransportException} rather than fabricating a success, so the caller's failure
- * policy (not this transport) decides how an outage resolves. Every value pulled off
+ * {@see TransportException} rather than fabricating a success: a {@see BillingRefused}
+ * when billing said no (a 4xx other than 408/429), a {@see BillingUnavailable} when it
+ * could not answer. The caller's failure policy resolves only the second. Every value pulled off
  * the wire is validated and cast explicitly; a missing or wrong-typed field is a
  * malformed response, not a silent zero.
  */
@@ -49,7 +54,7 @@ class HttpBillingTransport implements BillingTransport
             org: $org,
             meter: $meter,
             granted: $this->intField($body, 'granted', '/api/v1/leases'),
-            expiresAt: $this->optionalIntField($body, 'expires_at'),
+            expiresAt: $this->epochMs($body['expires_at'] ?? null),
         );
     }
 
@@ -108,7 +113,9 @@ class HttpBillingTransport implements BillingTransport
                 $meters[$meter] = new Entitlement(
                     meter: $meter,
                     enabled: (bool) ($definition['enabled'] ?? false),
-                    allowance: $this->toInt($definition['allowance'] ?? 0),
+                    // NULL is an unlimited meter, not an exhausted one. Casting it to 0 told every
+                    // consumer that gates on the allowance that an unlimited meter had nothing left.
+                    allowance: ($definition['allowance'] ?? null) === null ? null : $this->toInt($definition['allowance']),
                     weight: $this->toFloat($definition['weight'] ?? 1.0),
                     overage: is_string($definition['overage'] ?? null) ? (string) $definition['overage'] : 'block',
                 );
@@ -131,7 +138,7 @@ class HttpBillingTransport implements BillingTransport
         }
 
         if (! $response->successful()) {
-            throw TransportException::status($path, $response->status());
+            throw TransportException::fromResponse($path, $response);
         }
 
         return $this->decode($response->json(), $path);
@@ -149,7 +156,7 @@ class HttpBillingTransport implements BillingTransport
         }
 
         if (! $response->successful()) {
-            throw TransportException::status($path, $response->status());
+            throw TransportException::fromResponse($path, $response);
         }
 
         return $this->decode($response->json(), $path);
@@ -206,17 +213,30 @@ class HttpBillingTransport implements BillingTransport
     }
 
     /**
-     * @param  array<string, mixed>  $body
+     * A lease expiry as a millisecond epoch. The server sends ISO-8601 (`LeaseController`);
+     * an integer millisecond epoch is accepted too. Anything else is no expiry.
      */
-    private function optionalIntField(array $body, string $key): ?int
+    private function epochMs(mixed $value): ?int
     {
-        $value = $body[$key] ?? null;
-
         if (is_int($value)) {
             return $value;
         }
 
-        return is_string($value) && is_numeric($value) ? (int) $value : null;
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        if (ctype_digit($value)) {
+            return (int) $value;
+        }
+
+        try {
+            $at = new DateTimeImmutable($value);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return (int) $at->format('Uv');
     }
 
     /**

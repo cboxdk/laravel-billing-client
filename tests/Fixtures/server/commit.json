@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/CommitController.php::__invoke",
+    "request": "POST /api/v1/commit",
+    "status": 200,
+    "body": {"ok": true}
+}

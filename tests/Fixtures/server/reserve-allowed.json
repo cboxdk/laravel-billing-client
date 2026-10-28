@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/ReserveController.php::allowed",
+    "request": "POST /api/v1/reserve",
+    "status": 200,
+    "body": {"outcome": "allowed", "reservation_id": "01JBX6Q7W1Z9M3K2V8N4R5T6Y7"}
+}

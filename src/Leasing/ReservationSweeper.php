@@ -39,12 +39,18 @@ class ReservationSweeper
         $reclaimed = 0;
 
         foreach ($this->registry->expired($now) as $pending) {
+            // Close FIRST and only give back what this sweep closed. A slow request that
+            // commits or releases at the same moment races for the same close; exactly one
+            // of them wins and returns the units, so a long hold is never credited twice.
+            if (! $this->registry->close($pending->id)) {
+                continue;
+            }
+
             foreach ($pending->holds as $meter => $amount) {
                 $this->store->giveBack($pending->org, $meter, $amount);
                 $this->signals->refilled($pending->org, $meter, $amount);
             }
 
-            $this->registry->close($pending->id);
             $reclaimed++;
         }
 

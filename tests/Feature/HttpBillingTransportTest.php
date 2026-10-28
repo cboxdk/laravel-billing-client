@@ -80,3 +80,42 @@ it('raises a transport exception on a malformed body', function (): void {
     expect(fn () => makeHttpTransport()->lease('org_a', 'api.calls', 100))
         ->toThrow(TransportException::class);
 });
+
+/**
+ * INT-8: the server sends `expires_at` as an ISO-8601 string (`LeaseController`), and the
+ * transport only read integers, so every real lease came back with no expiry.
+ */
+it('parses the ISO-8601 lease expiry the server sends into a millisecond epoch', function (): void {
+    Http::fake([
+        'billing.test/api/v1/leases' => Http::response([
+            'lease_id' => 'lease_1',
+            'granted' => 40,
+            'expires_at' => '2026-10-28T12:05:00+00:00',
+        ]),
+    ]);
+
+    $grant = makeHttpTransport()->lease('org_a', 'api.calls', 100);
+
+    expect($grant->expiresAt)->toBe((new DateTimeImmutable('2026-10-28T12:05:00+00:00'))->getTimestamp() * 1000);
+});
+
+/**
+ * INT-8: an unlimited meter's allowance is `null` on the wire (`EntitlementsView`). It was cast
+ * to 0, so a consumer that gates on the allowance saw an unlimited meter as exhausted.
+ */
+it('keeps an unlimited meter unlimited instead of reading its null allowance as 0', function (): void {
+    Http::fake([
+        'billing.test/api/v1/entitlements/*' => Http::response([
+            'meters' => [
+                'api.calls' => ['enabled' => true, 'allowance' => null, 'weight' => 1.0, 'overage' => 'block'],
+                'seats' => ['enabled' => false, 'allowance' => null, 'weight' => null, 'overage' => 'block'],
+            ],
+        ]),
+    ]);
+
+    $entitlements = makeHttpTransport()->entitlements('org_a');
+
+    expect($entitlements->for('api.calls')?->allowance)->toBeNull()
+        ->and($entitlements->for('api.calls')?->isUnlimited())->toBeTrue()
+        ->and($entitlements->for('seats')?->enabled)->toBeFalse();
+});
