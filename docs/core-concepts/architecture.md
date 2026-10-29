@@ -36,8 +36,12 @@ billing said no, `BillingUnavailable` when it could not answer (see [Errors](err
 - **`Contracts\UsageBuffer`** (`Buffers\CacheUsageBuffer`, `Buffers\ArrayUsageBuffer`) —
   the durable ledger every committed unit is appended to before it is counted anywhere
   else, holding a monotonic cumulative total per `(org, meter)`.
+- **`Contracts\AllowanceSnapshots`** (`Stores\CacheAllowanceSnapshots`) — the last
+  known entitlement and the units leased per `(org, meter)`, which the `last_known`
+  [failure policy](failure-policy.md) enforces while billing is unreachable.
 - **`Leasing\LeaseManager`** — acquires and refills leased slices from the transport
-  into the store.
+  into the store. Under `last_known` it also records each lease and refreshes the
+  entitlement snapshot.
 - **`Reporting\UsageReporter`** — ships the cumulative ledger to billing in the
   background.
 - **`BillingClient`** — the façade over all of the above, exposing `reserve` /

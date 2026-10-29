@@ -16,7 +16,7 @@ composer require cboxdk/laravel-billing-client
 BILLING_CLIENT_BASE_URL=https://billing.internal
 BILLING_CLIENT_API_TOKEN=your-service-token
 BILLING_CLIENT_LEASE_SIZE=100
-BILLING_CLIENT_FAIL=allow
+BILLING_CLIENT_FAIL=last_known
 ```
 
 With a base URL and token set, the provider binds the HTTP transport and the
@@ -112,8 +112,9 @@ Failure handling splits by cause:
 - An **exhausted allowance** (billing granted zero) is a semantic hard limit —
   `QuotaExceeded`, always fail closed.
 - An **unreachable billing service** is an infrastructure fault, resolved by the `fail`
-  policy: `allow` admits best-effort (usage still buffered and reconciled later); `deny`
-  refuses.
+  policy. `last_known` (the default) admits up to the allowance the client last knew and
+  refuses past it on a hard-limit meter; `allow` admits everything; `deny` refuses once
+  the local lease is spent. Usage is buffered and reconciled later under every policy.
 
 ### More enforcement hardening
 
