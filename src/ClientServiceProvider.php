@@ -8,6 +8,7 @@ use Cbox\Billing\Client\Buffers\CacheUsageBuffer;
 use Cbox\Billing\Client\Buffers\DatabaseUsageBuffer;
 use Cbox\Billing\Client\Console\ReportUsageCommand;
 use Cbox\Billing\Client\Console\SweepReservationsCommand;
+use Cbox\Billing\Client\Contracts\AllowanceSnapshots;
 use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\BillingTransport;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
@@ -21,6 +22,7 @@ use Cbox\Billing\Client\Leasing\LeaseManager;
 use Cbox\Billing\Client\Leasing\ReservationSweeper;
 use Cbox\Billing\Client\Reporting\UsageReporter;
 use Cbox\Billing\Client\Signals\NullBillingSignals;
+use Cbox\Billing\Client\Stores\CacheAllowanceSnapshots;
 use Cbox\Billing\Client\Stores\CacheLeaseStore;
 use Cbox\Billing\Client\Stores\CacheReservationRegistry;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
@@ -75,6 +77,17 @@ class ClientServiceProvider extends ServiceProvider
             return new CacheReservationRegistry(self::cache($app, $config), $prefix.':pending:');
         });
 
+        $this->app->singleton(AllowanceSnapshots::class, static function (Application $app): CacheAllowanceSnapshots {
+            $config = $app->make(Config::class);
+            $prefix = self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client');
+
+            return new CacheAllowanceSnapshots(
+                self::cache($app, $config),
+                $prefix.':snapshot:',
+                self::intConfig($config, 'billing-client.snapshot_refresh', 300),
+            );
+        });
+
         $this->app->singleton(UsageBuffer::class, static function (Application $app): UsageBuffer {
             $config = $app->make(Config::class);
             $prefix = self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client');
@@ -119,6 +132,7 @@ class ClientServiceProvider extends ServiceProvider
                 self::intConfig($config, 'billing-client.refill_lock_ttl', 10),
                 self::intConfig($config, 'billing-client.refill_lock_wait', 5),
                 $app->make(BillingSignals::class),
+                snapshots: self::snapshotsFor($app, $config),
             );
         });
 
@@ -147,6 +161,7 @@ class ClientServiceProvider extends ServiceProvider
                 registry: $app->make(ReservationRegistry::class),
                 signals: $app->make(BillingSignals::class),
                 reservationTtl: self::intConfig($config, 'billing-client.reservation_ttl', 300),
+                snapshots: self::snapshotsFor($app, $config),
             );
         });
 
@@ -194,6 +209,14 @@ class ClientServiceProvider extends ServiceProvider
         if (self::stringConfig($config, 'billing-client.buffer', 'cache') === 'database') {
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         }
+    }
+
+    /** The last known allowance, wired only when the failure policy enforces it. */
+    private static function snapshotsFor(Application $app, Config $config): ?AllowanceSnapshots
+    {
+        return FailurePolicy::fromConfig($config->get('billing-client.fail'))->enforcesLastKnown()
+            ? $app->make(AllowanceSnapshots::class)
+            : null;
     }
 
     private static function cache(Application $app, Config $config): CacheRepository

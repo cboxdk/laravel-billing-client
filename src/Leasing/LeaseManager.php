@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Leasing;
 
 use Cbox\Billing\Client\BillingClient;
+use Cbox\Billing\Client\Contracts\AllowanceSnapshots;
 use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\BillingTransport;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
@@ -34,6 +35,10 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
  *    or a waiter reused a slice the holder already refilled (no round-trip made).
  *  - {@see TransportException} — billing unreachable (INFRASTRUCTURE); propagated so
  *    the client can apply its failure policy.
+ *
+ * Given {@see AllowanceSnapshots}, every answered lease is recorded there, and the
+ * organization's entitlements are re-read at most once per refresh interval, so the
+ * client can enforce the last known allowance if billing later becomes unreachable.
  */
 class LeaseManager
 {
@@ -47,6 +52,7 @@ class LeaseManager
         private readonly int $lockWait = 5,
         private readonly BillingSignals $signals = new NullBillingSignals,
         private readonly string $lockPrefix = 'cbox-billing-client:refill:',
+        private readonly ?AllowanceSnapshots $snapshots = null,
     ) {}
 
     /**
@@ -127,6 +133,29 @@ class LeaseManager
             $this->signals->refilled($org, $meter, $grant->granted);
         }
 
+        $this->remember($org, $meter, $size, $grant->granted);
+
         return $grant->granted;
+    }
+
+    /**
+     * Keep what this answer told us for an outage. Best-effort: billing just answered, so
+     * an entitlement read that fails now is retried after the refresh interval.
+     */
+    private function remember(string $org, string $meter, int $requested, int $granted): void
+    {
+        if ($this->snapshots === null) {
+            return;
+        }
+
+        if ($this->snapshots->claimRefresh($org)) {
+            try {
+                $this->snapshots->remember($this->transport->entitlements($org));
+            } catch (TransportException) {
+                // Keep the previous snapshot; the next interval reads again.
+            }
+        }
+
+        $this->snapshots->recordLease($org, $meter, $requested, $granted);
     }
 }

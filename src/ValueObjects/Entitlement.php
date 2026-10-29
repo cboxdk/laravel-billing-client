@@ -36,6 +36,16 @@ readonly class Entitlement
     }
 
     /**
+     * True when usage on this meter must stop at the allowance: enabled, not unlimited,
+     * and not `bill` overage. An overage behaviour this client does not recognise counts
+     * as capped (deny-by-default).
+     */
+    public function isCapped(): bool
+    {
+        return $this->enabled && $this->allowance !== null && $this->overage !== 'bill';
+    }
+
+    /**
      * Weighted billable cost of `$units` raw units on this meter: `units × weight`.
      * The weight converts a raw metered quantity (requests, tokens, bytes) into the
      * meter's billable cost unit. Non-positive usage costs nothing.
