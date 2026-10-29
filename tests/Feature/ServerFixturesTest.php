@@ -18,6 +18,7 @@ use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\Subscription;
+use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
 use Illuminate\Http\Client\Factory as HttpFactory;
 
 /**
@@ -76,6 +77,14 @@ it('parses every recorded management response', function (): void {
 
     expect(managementReplaying('subscription')->subscription('org_a')?->plan)->toBe('pro');
 
+    expect(managementReplaying('subscription')->subscription('org_a')?->discount?->percentOff)->toBe(20);
+
+    expect(managementReplaying('reactivate')->reactivate('org_r')->cancelsAtPeriodEnd())->toBeFalse();
+
+    expect(fn () => managementReplaying('reactivate-conflict')->reactivate('org_a'))->toThrow(BillingRefused::class);
+
+    expect(managementReplaying('subscriptions')->subscriptions()->data[0]->organizationRef)->toBe('org_a');
+
     expect(managementReplaying('subscription-missing')->subscription('org_new'))->toBeNull();
 
     expect(managementReplaying('subscribe')->subscribe('org_a', 'pro')->paymentIntent)->toBeNull();
@@ -116,7 +125,12 @@ function seededManagementFake(): FakeManagementTransport
     return (new FakeManagementTransport)
         ->withPlan(new Plan('starter', 'Starter', 2_500, 'EUR', 'month', [new Entitlement('api.calls', true, 10_000, 1.0, 'block')]))
         ->withPlan(new Plan('pro', 'Pro', 4_900, 'EUR', 'month', [new Entitlement('api.calls', true, 100_000, 1.0, 'bill')]))
-        ->withSubscription('org_a', new Subscription('starter', 'active', $start, $start->modify('+1 month'), $start->modify('+1 month')))
+        ->withSubscription('org_a', new Subscription(
+            'starter', 'active', $start, $start->modify('+1 month'), $start->modify('+1 month'),
+            discount: new SubscriptionDiscount('SAVE20', 'repeating', 'Launch offer', 20, endsAt: new DateTimeImmutable('2027-01-01T00:00:00+00:00')),
+        ), $start->modify('+27 days'))
+        // A period-end cancel, so reactivate has something to undo.
+        ->withSubscription('org_r', new Subscription('starter', 'active', $start, $start->modify('+1 month'), null), $start->modify('+28 days'))
         ->withUsage('org_a', 'api.calls', new MeterUsage(750, 1_000, 0))
         ->withInvoice('org_a', new Invoice('CB-1', $start, 2_500, 'EUR', 'paid'))
         ->withPaymentMethod('org_a', new PaymentMethod('pm_1', 'visa', '4242', 12, 2030, true));
@@ -133,6 +147,8 @@ dataset('management endpoints', [
     'preview' => ['preview', 'POST', '/api/v1/subscriptions/org_a/preview', ['plan' => 'pro']],
     'change' => ['change', 'POST', '/api/v1/subscriptions/org_a/change', ['plan' => 'pro']],
     'cancel' => ['cancel', 'POST', '/api/v1/subscriptions/org_a/cancel', []],
+    'reactivate' => ['reactivate', 'POST', '/api/v1/subscriptions/org_r/reactivate', []],
+    'reactivate conflict' => ['reactivate-conflict', 'POST', '/api/v1/subscriptions/org_a/reactivate', []],
     'usage' => ['usage-summary', 'GET', '/api/v1/usage/org_a', []],
     'invoices' => ['invoices', 'GET', '/api/v1/invoices/org_a', []],
     'checkout' => ['checkout-session', 'POST', '/api/v1/checkout-sessions', ['org' => 'org_a', 'plan' => 'pro', 'return_url' => 'https://app.test']],
@@ -151,6 +167,14 @@ it('answers in the recorded shape: management', function (string $fixture, strin
     expect($answer->status)->toBe($recorded->status)
         ->and(ServerFixture::shape($answer->body))->toBe(ServerFixture::shape($recorded->body));
 })->with('management endpoints');
+
+it('answers the change feed in the recorded shape', function (): void {
+    $recorded = ServerFixture::load('subscriptions');
+    $answer = seededManagementFake()->respond('GET', '/api/v1/subscriptions', [], ['limit' => '1']);
+
+    expect($answer->status)->toBe($recorded->status)
+        ->and(ServerFixture::shape($answer->body))->toBe(ServerFixture::shape($recorded->body));
+});
 
 function seededBillingFake(): FakeBillingTransport
 {

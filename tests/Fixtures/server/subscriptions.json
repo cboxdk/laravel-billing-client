@@ -1,0 +1,13 @@
+{
+    "source": "app/Http/Controllers/Api/Management/SubscriptionChangesController.php::__invoke + present",
+    "request": "GET /api/v1/subscriptions?updated_since=&cursor=&limit=",
+    "status": 200,
+    "body": {"data": [{"id": 42, "organization_id": "01JBX7Q3W9T0S2M4V6Y8Z1A3C5", "organization_ref": "org_a",
+        "plan": "starter", "product": null, "status": "active", "paused": false, "pause_reason": null, "seats": 1,
+        "period_start": "2026-10-01T00:00:00+00:00", "period_end": "2026-11-01T00:00:00+00:00",
+        "cancel_at_period_end": false, "trial_ends_at": null, "canceled_at": null,
+        "discount": {"code": "SAVE20", "name": "Launch offer", "percent_off": 20, "amount_off_minor": null,
+            "currency": null, "duration": "repeating", "ends_at": "2027-01-01T00:00:00+00:00"},
+        "updated_at": "2026-10-28T09:00:00+00:00"}],
+        "has_more": true, "next_cursor": "eyJ1IjoiMjAyNi0xMC0yOFQwOTowMDowMFoiLCJpIjo0Mn0"}
+}

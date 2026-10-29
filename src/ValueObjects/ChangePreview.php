@@ -11,7 +11,8 @@ use DateTimeImmutable;
  * app can show the user exactly what switching plans costs before committing: the net
  * `dueNowMinor` charge, any prorated `creditMinor` applied, the `newRecurringMinor`
  * amount going forward, when the change takes `effectiveAt`, and the itemized `lines`.
- * All amounts are integer minor units.
+ * All amounts are integer minor units. Since 0.4.2 it carries the coupon `discount` the
+ * subscription keeps across the change (null when none, or from an older server).
  */
 readonly class ChangePreview
 {
@@ -24,5 +25,6 @@ readonly class ChangePreview
         public int $newRecurringMinor,
         public ?DateTimeImmutable $effectiveAt,
         public array $lines,
+        public ?SubscriptionDiscount $discount = null,
     ) {}
 }

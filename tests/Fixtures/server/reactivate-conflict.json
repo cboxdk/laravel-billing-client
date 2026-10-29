@@ -1,0 +1,6 @@
+{
+    "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::reactivate (RetentionException on an active subscription)",
+    "request": "POST /api/v1/subscriptions/{org}/reactivate",
+    "status": 409,
+    "body": {"error": "This subscription cannot be reactivated."}
+}

@@ -5,5 +5,7 @@
     "body": {"due_now_minor": 2400, "credit_minor": 2500, "new_recurring_minor": 4900,
         "effective_at": "2026-10-28T12:00:00+00:00",
         "credit_delta": {"forfeited": 0, "granted": 0, "carried": 0},
-        "lines": [{"description": "Pro plan", "minor": 4900}, {"description": "Unused time on Starter", "minor": -2500}]}
+        "lines": [{"description": "Pro plan", "minor": 4900}, {"description": "Unused time on Starter", "minor": -2500}],
+        "discount": {"code": "SAVE20", "name": "Launch offer", "percent_off": 20, "amount_off_minor": null,
+            "currency": null, "duration": "repeating", "ends_at": "2027-01-01T00:00:00+00:00"}}
 }

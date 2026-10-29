@@ -11,6 +11,7 @@ use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
+use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use Illuminate\Support\Facades\Facade;
@@ -23,8 +24,11 @@ use Illuminate\Support\Facades\Facade;
  * @method static ?Subscription subscription(string $org)
  * @method static SubscriptionResult subscribe(string $org, string $plan)
  * @method static ChangePreview previewChange(string $org, string $plan)
- * @method static Subscription changePlan(string $org, string $plan)
- * @method static Subscription cancel(string $org, bool $atPeriodEnd = false)
+ * @method static ChangePreview changePlan(string $org, string $plan)
+ * @method static Subscription cancel(string $org, bool $atPeriodEnd = true)
+ * @method static Subscription reactivate(string $org)
+ * @method static SubscriptionPage subscriptions(?\DateTimeInterface $updatedSince = null, ?string $cursor = null, ?int $limit = null)
+ * @method static \Generator<int, \Cbox\Billing\Client\ValueObjects\SubscriptionChange, mixed, void> allSubscriptions(?\DateTimeInterface $updatedSince = null, ?int $pageSize = null)
  * @method static UsageSummary usage(string $org)
  * @method static list<\Cbox\Billing\Client\ValueObjects\Invoice> invoices(string $org)
  * @method static CheckoutSession createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null)

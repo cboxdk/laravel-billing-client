@@ -3,6 +3,57 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.2
+
+A patch release. Everything is additive: no existing signature or default changes, and the
+client still talks to an older server.
+
+### Added
+
+- **The subscription change feed.** `BillingManagement::subscriptions(?DateTimeInterface
+  $updatedSince = null, ?string $cursor = null, ?int $limit = null): SubscriptionPage` reads
+  `GET /api/v1/subscriptions`. A page has `data` (a list of `SubscriptionChange`), `hasMore`
+  and `nextCursor`. `allSubscriptions(?DateTimeInterface $updatedSince = null, ?int
+  $pageSize = null)` returns a generator that reads every page as you iterate. Use it to sync
+  every subscriber's plan and status in a few calls instead of one call per organization.
+- `ValueObjects\SubscriptionChange`, one feed row. `id` and `organizationId` are Billing's
+  ids; key your records on `organizationRef`, your own tenant key. `organizationKey()`
+  falls back to Billing's id for an organization provisioned without one.
+- **Reactivate.** `BillingManagement::reactivate(string $org): Subscription` calls
+  `POST /api/v1/subscriptions/{org}/reactivate`. It resumes a pause, undoes a period-end
+  cancel, or brings back a subscription canceled within the win-back window. An active
+  subscription is a 409 and no subscription a 404, both as `BillingRefused`.
+- **Discounts, pauses and the organization key on a subscription.** `Subscription` gains
+  optional trailing arguments `discount` (`?SubscriptionDiscount`), `organizationRef`,
+  `pauseReason` and `paused`, plus `isPaused()`. `ChangePreview` gains an optional
+  `discount`. The new `ValueObjects\SubscriptionDiscount` has `code`, `duration`, `name`,
+  `percentOff`, `amountOffMinor`, `currency` and `endsAt`, plus `isPercentage()` and
+  `isForever()`. An older server omits these fields; they read as null and false.
+- `Contracts\SubscriptionTransport`, the contract for the feed and reactivate, implemented
+  by `HttpManagementTransport` and `FakeManagementTransport`.
+- `Exceptions\UnsupportedOperation`, thrown by `BillingManagement` when its transport does
+  not implement `SubscriptionTransport`.
+- `FakeManagementTransport` serves the feed (paged, filtered by `updated_since`, canceled
+  subscriptions included) and reactivate, and presents the discount, `organization_ref` and
+  `pause_reason`. `withSubscription()` takes an optional third argument, when the row last
+  changed.
+
+### Fixed
+
+- The `BillingManager` facade docblock now says `changePlan()` returns a `ChangePreview` and
+  `cancel()` defaults to the end of the period, as the methods have since 0.4.0.
+
+### Upgrade notes
+
+- **Why a new contract.** Adding methods to `ManagementTransport` would break every
+  transport written outside this package. The feed and reactivate live on
+  `SubscriptionTransport` instead. If you wrote your own management transport, it keeps
+  working; implement `SubscriptionTransport` too when you want the new calls. Until then
+  `reactivate()`, `subscriptions()` and `allSubscriptions()` throw `UnsupportedOperation`
+  and send nothing. The two contracts may merge in the next minor release.
+- The recorded server fixtures in `tests/Fixtures/server` now carry `organization_ref`,
+  `pause_reason` and `discount`. The contract suite expects a server that sends them.
+
 ## 0.4.1
 
 A patch release. No public signature changes, but the default outage behaviour changes:

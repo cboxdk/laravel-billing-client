@@ -30,6 +30,8 @@ $result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult (p
 $preview = BillingManager::previewChange('org_42', 'scale');
 $updated = BillingManager::changePlan('org_42', 'scale');
 $canceled = BillingManager::cancel('org_42', atPeriodEnd: true);
+$back = BillingManager::reactivate('org_42');           // undo the cancel (0.4.2)
+$page = BillingManager::subscriptions(updatedSince: $lastSync); // change feed (0.4.2)
 $usage = BillingManager::usage('org_42');               // UsageSummary
 $invoices = BillingManager::invoices('org_42');         // list<Invoice>
 ```
@@ -63,6 +65,8 @@ Like the enforcement path, the network lives behind one contract — `Management
 | `previewChange($org, $plan)` | `POST /api/v1/subscriptions/{org}/preview` |
 | `changePlan($org, $plan)` | `POST /api/v1/subscriptions/{org}/change` |
 | `cancel($org, $atPeriodEnd)` | `POST /api/v1/subscriptions/{org}/cancel` |
+| `reactivate($org)` ¹ | `POST /api/v1/subscriptions/{org}/reactivate` |
+| `subscriptions(?$updatedSince, ?$cursor, ?$limit)` ¹ | `GET /api/v1/subscriptions` |
 | `usage($org)` | `GET /api/v1/usage/{org}` |
 | `invoices($org)` | `GET /api/v1/invoices/{org}` |
 | `createCheckoutSession($org, $plan, $returnUrl, ?$currency)` | `POST /api/v1/checkout-sessions` |
@@ -73,10 +77,76 @@ Like the enforcement path, the network lives behind one contract — `Management
 | `setDefaultPaymentMethod($org, $id)` | `POST /api/v1/payment-methods/{org}/default` |
 | `removePaymentMethod($org, $id)` | `DELETE /api/v1/payment-methods/{org}/{id}` |
 
+¹ Added in 0.4.2 on a separate contract, `SubscriptionTransport`, so a transport you wrote
+against 0.4.1 still compiles. `HttpManagementTransport` and `FakeManagementTransport`
+implement both. Calling one of these through `BillingManagement` on a transport that only
+implements `ManagementTransport` throws `UnsupportedOperation`; nothing is sent.
+
 Every call authenticates with the configured bearer token. The transport is **bound only
 when a base URL and token are configured** — otherwise the host binds its own (e.g. the
 fake in tests), keeping the package deny-by-default rather than pointing at a phantom
 endpoint.
+
+## Discounts, pauses and your organization key
+
+Since 0.4.2 every `Subscription` carries:
+
+- `discount`: the bound coupon as a `SubscriptionDiscount` (`code`, `name`, `percentOff` or
+  `amountOffMinor` + `currency`, `duration` of `once`, `repeating` or `forever`, and
+  `endsAt`), or null. `ChangePreview::$discount` shows the coupon on a preview or change.
+- `organizationRef`: your own tenant key for the organization, the `{org}` you call with.
+- `paused` and `pauseReason` (today only `billing_address`); `isPaused()` checks either.
+
+An older server leaves these out. They then read as null and false; nothing throws.
+
+## Reactivate
+
+`reactivate($org)` resumes a paused subscription, undoes a scheduled period-end cancel, or
+brings back one canceled within the win-back window, and returns the `Subscription`. On a
+subscription that is already active the server answers 409 and you get a `BillingRefused`
+with `status` 409; with no subscription at all it is a 404.
+
+## Syncing subscriptions with the change feed
+
+To mirror every subscriber's plan and status, read the change feed instead of calling
+`subscription()` once per organization:
+
+```php
+use Cbox\Billing\Client\Facades\BillingManager;
+
+$page = BillingManager::subscriptions(updatedSince: $lastSync, limit: 100); // SubscriptionPage
+
+foreach ($page->data as $change) {                  // SubscriptionChange
+    Tenant::where('key', $change->organizationRef)->update([
+        'plan' => $change->plan,
+        'billing_status' => $change->status,
+    ]);
+}
+
+if ($page->hasMore) {
+    $next = BillingManager::subscriptions(cursor: $page->nextCursor, limit: 100);
+}
+```
+
+Rows come oldest change first. Keep the `updatedAt` of the last row you handled and pass it
+as `updatedSince` next time. The filter is inclusive, so you may see that row again; make
+your update idempotent.
+
+`allSubscriptions(?$updatedSince, ?$pageSize)` reads every page for you, one request per page
+as you iterate:
+
+```php
+foreach (BillingManager::allSubscriptions($lastSync) as $change) {
+    // ...
+}
+```
+
+Each `SubscriptionChange` has Billing's `id` (an int) and `organizationId` (Billing's own
+organization id), and `organizationRef`, your tenant key. Key your records on
+`organizationRef`. `organizationKey()` returns it, or Billing's id for an organization that
+was provisioned without one. It also carries `plan` and `product` keys (null if the plan was
+removed), `status`, `paused`, `pauseReason`, `seats`, the period bounds,
+`cancelAtPeriodEnd`, `trialEndsAt`, `canceledAt`, `discount` and `updatedAt`.
 
 ## Collecting payment (ADR-0009)
 
@@ -113,7 +183,7 @@ org with no subscription (a 404), returns `null`, distinct from an error.
 ## Typed value objects
 
 Every response decodes into a `readonly` value object — `Plan`, `Subscription`,
-`SubscriptionResult`, `PaymentIntent`, `ChangePreview`, `PreviewLine`, `UsageSummary`,
+`SubscriptionDiscount`, `SubscriptionPage`, `SubscriptionChange`, `SubscriptionResult`, `PaymentIntent`, `ChangePreview`, `PreviewLine`, `UsageSummary`,
 `MeterUsage`, `BillingPeriod`, `Invoice`, and the payment types `CheckoutSession`,
 `PortalSession`, `SetupIntent`, `PaymentMethod` — with amounts as integer **minor units**
 (no float money) and dates parsed to `DateTimeImmutable`. See the cookbook for end-to-end

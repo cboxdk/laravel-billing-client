@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
@@ -19,6 +20,8 @@ use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
+use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
+use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
@@ -46,6 +49,11 @@ use Illuminate\Http\Client\Request;
  *    longer reads back (the server only serves a serving subscription).
  *  - Proration: a plan change credits the current plan's price and charges only the net
  *    difference now.
+ *  - The change feed (0.4.2) lists every subscription the fake has seen, including ones
+ *    canceled outright, ordered by when it last changed and paged by an opaque cursor. Each
+ *    row's `organization_ref` is the `{org}` you called with, as on the server, and
+ *    `organization_id` a stand-in Billing id. Reactivate resumes a pause, undoes a
+ *    period-end cancel, or brings back a canceled subscription; on an active one it is a 409.
  *  - {@see takeDown()} makes every call fail with a connection error
  *    ({@see BillingUnavailable}); {@see refuseWith()} makes every call answer a status, for
  *    example a 401 for a revoked token.
@@ -58,7 +66,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements ManagementTransport
+class FakeManagementTransport implements ManagementTransport, SubscriptionTransport
 {
     private const string BASE_URL = 'https://billing.fake';
 
@@ -67,6 +75,15 @@ class FakeManagementTransport implements ManagementTransport
 
     /** @var array<string, Subscription> */
     private array $subscriptions = [];
+
+    /**
+     * Every subscription the change feed lists, serving or not, keyed by org.
+     *
+     * @var array<string, array{id: int, subscription: Subscription, canceledAt: ?DateTimeImmutable, updatedAt: DateTimeImmutable}>
+     */
+    private array $records = [];
+
+    private int $subscriptionSeq = 0;
 
     /** @var array<string, array<string, MeterUsage>> */
     private array $usage = [];
@@ -101,9 +118,14 @@ class FakeManagementTransport implements ManagementTransport
         return $this;
     }
 
-    public function withSubscription(string $org, Subscription $subscription): self
+    /**
+     * Seed `org`'s subscription. `$updatedAt` sets when the change feed reports it last
+     * changed (now when null), to test an `updatedSince` sync.
+     */
+    public function withSubscription(string $org, Subscription $subscription, ?DateTimeInterface $updatedAt = null): self
     {
         $this->subscriptions[$org] = $subscription;
+        $this->record($org, $subscription, null, $updatedAt);
 
         return $this;
     }
@@ -222,6 +244,16 @@ class FakeManagementTransport implements ManagementTransport
         return $this->wire()->cancel($org, $atPeriodEnd);
     }
 
+    public function subscriptions(?DateTimeInterface $updatedSince = null, ?string $cursor = null, ?int $limit = null): SubscriptionPage
+    {
+        return $this->wire()->subscriptions($updatedSince, $cursor, $limit);
+    }
+
+    public function reactivate(string $org): Subscription
+    {
+        return $this->wire()->reactivate($org);
+    }
+
     public function usage(string $org): UsageSummary
     {
         return $this->wire()->usage($org);
@@ -291,12 +323,14 @@ class FakeManagementTransport implements ManagementTransport
 
         return match (true) {
             $method === 'GET' && $segments === ['plans'] => $this->listPlans($query),
+            $method === 'GET' && $segments === ['subscriptions'] => $this->listSubscriptionChanges($query),
             $method === 'PUT' && $count === 2 && $resource === 'organizations' => $this->upsertOrganization($segments[1], $payload),
             $method === 'GET' && $count === 2 && $resource === 'subscriptions' => $this->showSubscription($segments[1]),
             $method === 'POST' && $segments === ['subscriptions'] => $this->storeSubscription($payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'preview' => $this->preview($segments[1], $payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'change' => $this->change($segments[1], $payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'cancel' => $this->cancelSubscription($segments[1], $payload),
+            $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'reactivate' => $this->reactivateSubscription($segments[1]),
             $method === 'GET' && $count === 2 && $resource === 'usage' => $this->usageSummary($segments[1]),
             $method === 'GET' && $count === 2 && $resource === 'invoices' => $this->listInvoices($segments[1]),
             $method === 'POST' && $segments === ['checkout-sessions'] => $this->checkoutSession($payload),
@@ -396,7 +430,7 @@ class FakeManagementTransport implements ManagementTransport
             return FakeResponse::error(404, 'This organization has no active subscription.');
         }
 
-        return FakeResponse::json($this->presentSubscription($subscription));
+        return FakeResponse::json($this->presentSubscription($org, $subscription));
     }
 
     /**
@@ -424,9 +458,10 @@ class FakeManagementTransport implements ManagementTransport
         $subscription = new Subscription($key, 'active', $now, $end, $end);
 
         $this->subscriptions[$org] = $subscription;
+        $this->record($org, $subscription, fresh: true);
 
         return FakeResponse::json([
-            'subscription' => $this->presentSubscription($subscription),
+            'subscription' => $this->presentSubscription($org, $subscription),
             'coupon' => null,
             // The server answers null here today; a subscribe never hands back an intent.
             'payment_intent' => null,
@@ -477,7 +512,10 @@ class FakeManagementTransport implements ManagementTransport
             periodStart: $current->periodStart,
             periodEnd: $current->periodEnd,
             renewsAt: $current->periodEnd,
+            discount: $current->discount,
+            organizationRef: $current->organizationRef,
         );
+        $this->record($org, $this->subscriptions[$org]);
 
         return FakeResponse::json(['scheduled' => false] + $preview);
     }
@@ -508,6 +546,10 @@ class FakeManagementTransport implements ManagementTransport
             periodStart: $current->periodStart,
             periodEnd: $atPeriodEnd ? $current->periodEnd : $now,
             renewsAt: null,
+            discount: $current->discount,
+            organizationRef: $current->organizationRef,
+            pauseReason: $current->pauseReason,
+            paused: $current->paused,
         );
 
         if ($atPeriodEnd) {
@@ -517,7 +559,125 @@ class FakeManagementTransport implements ManagementTransport
             unset($this->subscriptions[$org]);
         }
 
-        return FakeResponse::json($this->presentSubscription($updated, $atPeriodEnd ? null : $now));
+        $this->record($org, $updated, $atPeriodEnd ? null : $now);
+
+        return FakeResponse::json($this->presentSubscription($org, $updated, $atPeriodEnd ? null : $now));
+    }
+
+    /**
+     * `SubscriptionController::reactivate`: resume a pause, undo a period-end cancel, or bring
+     * back a canceled subscription for a fresh period. 404 with no subscription at all, 409 for
+     * one that is already active.
+     */
+    private function reactivateSubscription(string $org): FakeResponse
+    {
+        $record = $this->records[$org] ?? null;
+
+        if ($record === null) {
+            return FakeResponse::error(404, 'This organization has no subscription.');
+        }
+
+        $current = $record['subscription'];
+        $serving = isset($this->subscriptions[$org]);
+
+        if ($serving && ! $current->isPaused() && ! $current->cancelsAtPeriodEnd()) {
+            return FakeResponse::error(409, 'This subscription cannot be reactivated.');
+        }
+
+        $now = new DateTimeImmutable;
+        $start = $serving ? $current->periodStart : $now;
+        $end = $serving ? $current->periodEnd : $now->modify('+1 month');
+
+        $reactivated = new Subscription(
+            plan: $current->plan,
+            status: 'active',
+            periodStart: $start,
+            periodEnd: $end,
+            renewsAt: $end,
+            discount: $current->discount,
+            organizationRef: $current->organizationRef,
+        );
+
+        $this->subscriptions[$org] = $reactivated;
+        $this->record($org, $reactivated);
+
+        return FakeResponse::json($this->presentSubscription($org, $reactivated));
+    }
+
+    /**
+     * `SubscriptionChangesController`: rows ordered by `(updated_at, id)`, filtered by
+     * `updated_since`, paged by an opaque cursor that is strictly after the last row.
+     *
+     * @param  array<array-key, mixed>  $query
+     */
+    private function listSubscriptionChanges(array $query): FakeResponse
+    {
+        $since = is_string($query['updated_since'] ?? null) && $query['updated_since'] !== ''
+            ? new DateTimeImmutable($query['updated_since'])
+            : null;
+
+        $after = null;
+
+        if (is_string($query['cursor'] ?? null) && $query['cursor'] !== '') {
+            $decoded = json_decode((string) base64_decode(strtr($query['cursor'], '-_', '+/'), true), true);
+
+            if (! is_array($decoded) || ! is_string($decoded[0] ?? null) || ! is_int($decoded[1] ?? null)) {
+                return FakeResponse::error(400, 'The cursor is invalid.');
+            }
+
+            $after = [$decoded[0], $decoded[1]];
+        }
+
+        $limit = is_numeric($query['limit'] ?? null) ? max(1, min(100, (int) $query['limit'])) : 20;
+
+        $rows = [];
+
+        foreach ($this->records as $org => $record) {
+            $key = [$record['updatedAt']->format('U.u'), $record['id']];
+
+            if ($since !== null && $record['updatedAt'] < $since) {
+                continue;
+            }
+
+            if ($after !== null && $key <= $after) {
+                continue;
+            }
+
+            $rows[] = ['org' => $org, 'key' => $key] + $record;
+        }
+
+        usort($rows, static fn (array $a, array $b): int => $a['key'] <=> $b['key']);
+
+        $hasMore = count($rows) > $limit;
+        $rows = array_slice($rows, 0, $limit);
+        $last = $rows === [] ? null : $rows[count($rows) - 1];
+
+        return FakeResponse::json([
+            'data' => array_map(
+                fn (array $row): array => $this->presentChange($row['org'], $row['id'], $row['subscription'], $row['canceledAt'], $row['updatedAt']),
+                $rows,
+            ),
+            'has_more' => $hasMore,
+            'next_cursor' => $hasMore && $last !== null
+                ? rtrim(strtr(base64_encode((string) json_encode($last['key'])), '+/', '-_'), '=')
+                : null,
+        ]);
+    }
+
+    /**
+     * Note a change for the feed. A subscribe starts a new subscription (a new id); every other
+     * change keeps the organization's id.
+     */
+    private function record(string $org, Subscription $subscription, ?DateTimeImmutable $canceledAt = null, ?DateTimeInterface $at = null, bool $fresh = false): void
+    {
+        $existing = $this->records[$org] ?? null;
+
+        $this->records[$org] = [
+            'id' => $existing === null || $fresh ? ++$this->subscriptionSeq : $existing['id'],
+            'subscription' => $subscription,
+            'canceledAt' => $canceledAt,
+            'updatedAt' => $at === null ? new DateTimeImmutable : DateTimeImmutable::createFromInterface($at),
+        ];
     }
 
     private function usageSummary(string $org): FakeResponse
@@ -694,12 +854,15 @@ class FakeManagementTransport implements ManagementTransport
      *
      * @return array<string, mixed>
      */
-    private function presentSubscription(Subscription $subscription, ?DateTimeImmutable $canceledAt = null): array
+    private function presentSubscription(string $org, Subscription $subscription, ?DateTimeImmutable $canceledAt = null): array
     {
         return [
             'plan' => $subscription->plan,
+            'organization_ref' => $subscription->organizationRef ?? $org,
             'status' => $subscription->status,
-            'paused' => $subscription->status === 'paused',
+            'paused' => $subscription->isPaused(),
+            'pause_reason' => $subscription->pauseReason,
+            'discount' => $this->presentDiscount($subscription->discount),
             'seats' => 1,
             'period_start' => $this->date($subscription->periodStart),
             'period_end' => $this->date($subscription->periodEnd),
@@ -709,6 +872,61 @@ class FakeManagementTransport implements ManagementTransport
             'pending_change' => null,
             'add_ons' => [],
         ];
+    }
+
+    /**
+     * `SubscriptionChangesController::present()`.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentChange(string $org, int $id, Subscription $subscription, ?DateTimeImmutable $canceledAt, DateTimeImmutable $updatedAt): array
+    {
+        return [
+            'id' => $id,
+            'organization_id' => $this->billingId($org),
+            'organization_ref' => $subscription->organizationRef ?? $org,
+            'plan' => $subscription->plan,
+            'product' => null,
+            'status' => $subscription->status,
+            'paused' => $subscription->isPaused(),
+            'pause_reason' => $subscription->pauseReason,
+            'seats' => 1,
+            'period_start' => $this->date($subscription->periodStart),
+            'period_end' => $this->date($subscription->periodEnd),
+            'cancel_at_period_end' => $canceledAt === null && $subscription->cancelsAtPeriodEnd(),
+            'trial_ends_at' => null,
+            'canceled_at' => $this->date($canceledAt),
+            'discount' => $this->presentDiscount($subscription->discount),
+            'updated_at' => $this->date($updatedAt),
+        ];
+    }
+
+    /**
+     * The bound-coupon block on every subscription payload and preview.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function presentDiscount(?SubscriptionDiscount $discount): ?array
+    {
+        if ($discount === null) {
+            return null;
+        }
+
+        return [
+            'code' => $discount->code,
+            'name' => $discount->name,
+            'percent_off' => $discount->percentOff,
+            'amount_off_minor' => $discount->amountOffMinor,
+            'currency' => $discount->currency,
+            'duration' => $discount->duration,
+            'ends_at' => $this->date($discount->endsAt),
+        ];
+    }
+
+    /** A stand-in for Billing's own organization id, stable per org. */
+    private function billingId(string $org): string
+    {
+        return '01FAKE'.strtoupper(substr(hash('sha256', $org), 0, 20));
     }
 
     /**
@@ -735,6 +953,7 @@ class FakeManagementTransport implements ManagementTransport
             'effective_at' => $this->date(new DateTimeImmutable),
             'credit_delta' => ['forfeited' => 0, 'granted' => 0, 'carried' => 0],
             'lines' => $lines,
+            'discount' => $this->presentDiscount($current?->discount),
         ];
     }
 
