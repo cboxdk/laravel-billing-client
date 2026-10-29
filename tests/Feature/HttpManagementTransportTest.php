@@ -190,6 +190,23 @@ it('provisions an organization with an idempotent PUT', function (): void {
         && $request->hasHeader('Authorization', 'Bearer secret-token'));
 });
 
+it('sends the purchaser type, EAN and order reference on the organization upsert', function (): void {
+    Http::fake([
+        'billing.test/api/v1/organizations/org_1' => Http::response(['organization' => ['id' => 'org_1']]),
+    ]);
+
+    makeHttpManagement()->ensureOrganization('org_1', [
+        'name' => 'Kommune',
+        'purchaser_type' => 'public_body',
+        'ean_number' => '5790000000005',
+        'order_reference' => 'Rekv. 4711',
+    ]);
+
+    Http::assertSent(fn ($request): bool => $request['purchaser_type'] === 'public_body'
+        && $request['ean_number'] === '5790000000005'
+        && $request['order_reference'] === 'Rekv. 4711');
+});
+
 it('surfaces an organization provisioning failure as a transport exception', function (): void {
     Http::fake([
         'billing.test/api/v1/organizations/org_1' => Http::response(['error' => 'nope'], 403),

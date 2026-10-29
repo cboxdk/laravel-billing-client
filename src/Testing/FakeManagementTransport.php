@@ -70,6 +70,18 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
 {
     private const string BASE_URL = 'https://billing.fake';
 
+    /**
+     * The `purchaser_type` values the server accepts: the tax engine's PurchaserType.
+     *
+     * @var list<string>
+     */
+    private const array PURCHASER_TYPES = [
+        'federal_government', 'state_or_local_government', 'tribal_government', 'foreign_diplomat',
+        'charitable_organization', 'religious_organization', 'resale', 'agricultural_production',
+        'industrial_production', 'direct_pay_permit', 'direct_mail', 'educational_organization', 'other',
+        'diplomatic_or_consular', 'international_body', 'armed_forces', 'public_body',
+    ];
+
     /** @var array<string, Plan> */
     private array $plans = [];
 
@@ -399,6 +411,18 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
     {
         if ($this->string($payload, 'name') === '') {
             return FakeResponse::validation('name', 'The name field is required.');
+        }
+
+        $purchaser = $payload['purchaser_type'] ?? null;
+
+        if ($purchaser !== null && (! is_string($purchaser) || ! in_array($purchaser, self::PURCHASER_TYPES, true))) {
+            return FakeResponse::validation('purchaser_type', 'The selected purchaser type is invalid.');
+        }
+
+        $ean = $payload['ean_number'] ?? null;
+
+        if ($ean !== null && $ean !== '' && (! is_string($ean) || ! self::validEan($ean))) {
+            return FakeResponse::validation('ean_number', 'The ean number must be a 13-digit EAN (GLN) number with a valid check digit.');
         }
 
         $attributes = [];
@@ -1014,7 +1038,28 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             'billing_email' => $attributes['billing_email'] ?? null,
             'billing_country' => $attributes['billing_country'] ?? null,
             'billing_currency' => $attributes['billing_currency'] ?? null,
+            'purchaser_type' => $attributes['purchaser_type'] ?? null,
+            'ean_number' => $attributes['ean_number'] ?? null,
+            'order_reference' => $attributes['order_reference'] ?? null,
         ];
+    }
+
+    /** The server's rule: 13 digits (spaces and dashes ignored) with a valid GS1 check digit. */
+    private static function validEan(string $value): bool
+    {
+        $digits = preg_replace('/[\s\-]/', '', $value) ?? '';
+
+        if (preg_match('/^\d{13}$/', $digits) !== 1) {
+            return false;
+        }
+
+        $sum = 0;
+
+        foreach (str_split(substr($digits, 0, 12)) as $i => $digit) {
+            $sum += (int) $digit * ($i % 2 === 0 ? 1 : 3);
+        }
+
+        return (int) $digits[12] === (10 - $sum % 10) % 10;
     }
 
     /**

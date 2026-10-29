@@ -56,7 +56,7 @@ interface ManagementTransport
      * checkout; `billing_currency` in `$attributes` is only applied on create
      * (the billing service's one-way currency lock).
      *
-     * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null}  $attributes
+     * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null, purchaser_type?: string|null, ean_number?: string|null, order_reference?: string|null}  $attributes
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */

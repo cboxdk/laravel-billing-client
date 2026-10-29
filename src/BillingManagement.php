@@ -57,7 +57,13 @@ class BillingManagement
      * Idempotently provision the organization this platform bills for. Safe to call
      * before every subscribe/checkout; currency is only applied on create.
      *
-     * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null}  $attributes
+     * Optional since 0.4.3: `purchaser_type` (who the customer buys as, where that can exempt
+     * the sale: the tax engine's PurchaserType values, such as `state_or_local_government`,
+     * `diplomatic_or_consular` or `public_body`; it never exempts by itself), `ean_number` (the
+     * 13-digit GLN a Danish public body is invoiced to) and `order_reference` (the purchase
+     * order or contact person printed on every invoice). An older server ignores them.
+     *
+     * @param  array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null, purchaser_type?: string|null, ean_number?: string|null, order_reference?: string|null}  $attributes
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */

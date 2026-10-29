@@ -152,6 +152,30 @@ it('provisions organizations through the fake with the currency lock mirrored', 
     expect($fake->organizations()['org_1'])->toBe(['name' => 'Acme ApS', 'billing_currency' => 'USD']);
 });
 
+it('provisions the purchaser type and public-sector invoice data through the fake', function (): void {
+    $fake = new FakeManagementTransport;
+    $management = new BillingManagement($fake);
+
+    $management->ensureOrganization('org_region', [
+        'name' => 'Region',
+        'purchaser_type' => 'public_body',
+        'ean_number' => '5790000000005',
+        'order_reference' => 'Att. Jens Hansen',
+    ]);
+
+    expect($fake->organizations()['org_region'])->toMatchArray([
+        'purchaser_type' => 'public_body',
+        'ean_number' => '5790000000005',
+        'order_reference' => 'Att. Jens Hansen',
+    ]);
+
+    // The server's validation, mirrored: an unknown purchaser type and a wrong check digit.
+    expect(fn () => $management->ensureOrganization('org_region', ['name' => 'Region', 'purchaser_type' => 'royalty']))
+        ->toThrow(TransportException::class);
+    expect(fn () => $management->ensureOrganization('org_region', ['name' => 'Region', 'ean_number' => '5790000000004']))
+        ->toThrow(TransportException::class);
+});
+
 /**
  * INT-8: `cancel()` defaulted to an IMMEDIATE cancel, while the server defaults to period end
  * (`at_period_end` absent → true). A bare `cancel($org)` cut a paying customer off mid-period.
