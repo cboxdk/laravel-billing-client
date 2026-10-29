@@ -17,7 +17,7 @@ composer require cboxdk/laravel-billing-client
 BILLING_CLIENT_BASE_URL=https://billing.internal
 BILLING_CLIENT_API_TOKEN=your-service-token
 BILLING_CLIENT_LEASE_SIZE=100
-BILLING_CLIENT_FAIL=allow
+BILLING_CLIENT_FAIL=last_known
 ```
 
 With a base URL and token set, the service provider binds the HTTP transport and the

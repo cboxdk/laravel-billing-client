@@ -41,9 +41,10 @@ production, and a fake cannot hand back a shape the server never sends.
 - **`grant($org, $meter, $allowance)`** — set the central allowance to lease from.
   Leases are pessimistic and can never over-grant.
 - **`entitlement($org, $entitlement)`** — register what `reserveRemote` / `entitlements`
-  return.
+  return. A `FailurePolicy::LastKnown` client reads it on its first refill and enforces
+  it during an outage; without it, that client refuses as `deny` once the lease is spent.
 - **`takeDown()` / `bringUp()`** — simulate an unreachable billing service (a connection
-  error, `BillingUnavailable`) to exercise the fail-open / fail-closed policy.
+  error, `BillingUnavailable`) to exercise the failure policy.
 - **`refuseWith($status)`** — answer every call with a status: `401` for a revoked token
   (`BillingRefused`, which fails closed under every policy), `429` or `503` for load
   shedding (`BillingUnavailable`).
@@ -55,6 +56,36 @@ subscription reads as `null`, an unknown plan is a 404, a subscribe returns
 `payment_intent: null`, and cancel defaults to period end. It has `takeDown()` and
 `refuseWith()` too, and `requireProvisionedOrganizations()` to refuse a subscribe for an
 organization you never provisioned.
+
+## Testing an outage
+
+`makeBillingClient()` keeps `FailurePolicy::Allow` as its default, so existing suites
+behave as before. To test the production default, pass `FailurePolicy::LastKnown` and
+register the entitlement it should enforce:
+
+```php
+use Cbox\Billing\Client\Enums\FailurePolicy;
+use Cbox\Billing\Client\Exceptions\QuotaExceeded;
+use Cbox\Billing\Client\ValueObjects\Entitlement;
+
+it('stops at the allowance while billing is down', function () {
+    $this->transport()
+        ->grant('org_a', 'api.calls', 1_000)
+        ->entitlement('org_a', new Entitlement('api.calls', true, 1_000, 1.0, 'block'));
+
+    $client = $this->makeBillingClient(leaseSize: 100, failurePolicy: FailurePolicy::LastKnown);
+    $client->commit($client->reserve('org_a', 'api.calls', 100), 100);
+
+    $this->transport()->takeDown();
+
+    // 200 leased (the slice was topped up), so 800 can be admitted past the lease.
+    $client->commit($client->reserve('org_a', 'api.calls', 800), 800);
+
+    expect(fn () => $client->reserve('org_a', 'api.calls', 101))->toThrow(QuotaExceeded::class);
+});
+```
+
+`$this->allowanceSnapshots()` returns the store that client enforces from.
 
 ## Deterministic ids
 

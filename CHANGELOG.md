@@ -3,6 +3,45 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.1
+
+A patch release. No public signature changes, but the default outage behaviour changes:
+read the upgrade notes.
+
+### Fixed
+
+- **An outage no longer over-admits or blocks too early.** While billing was unreachable
+  the client either admitted every request (`allow`) or refused as soon as the local lease
+  was spent (`deny`). A free organization with a 1,000,000-span block meter, 300,000 used
+  and a 100,000 lease unspent, ended an outage at 1,200,000 under `allow` and was cut off
+  at 400,000 under `deny`. The new default policy stops it at 1,000,000.
+
+### Added
+
+- `FailurePolicy::LastKnown` (`fail = last_known`), now the default. During an outage the
+  client admits up to the last known allowance minus what billing has leased to it, then
+  refuses with `QuotaExceeded` on a hard-limit meter. `bill`-overage and unlimited meters
+  keep admitting. With no known entitlement it refuses as `deny` does. A refusal emits the
+  `denied` signal with reason `outage_limit`. See `docs/core-concepts/failure-policy.md`.
+- `Contracts\AllowanceSnapshots` and `Stores\CacheAllowanceSnapshots`, bound by the
+  provider, and the `snapshot_refresh` setting (`BILLING_CLIENT_SNAPSHOT_REFRESH`,
+  default 300 seconds).
+- `Entitlement::isCapped()`, `FailurePolicy::enforcesLastKnown()` and
+  `InteractsWithBillingClient::allowanceSnapshots()`.
+- An optional trailing `snapshots` constructor argument on `BillingClient` and
+  `LeaseManager`.
+
+### Upgrade notes
+
+- **The default policy is `last_known`.** Under it the client reads
+  `GET /api/v1/entitlements/{org}` on a lease refill, at most once per `snapshot_refresh`
+  seconds. To keep the 0.4.0 behaviour, set `BILLING_CLIENT_FAIL=allow`. `allow` and
+  `deny` are unchanged.
+- An unrecognised `fail` value now falls back to `last_known` instead of `allow`.
+- A `BillingClient` built by hand, and `makeBillingClient()` in tests, still default to
+  `allow`. Pass `FailurePolicy::LastKnown` (and, by hand, an `AllowanceSnapshots`) to use
+  the new policy there.
+
 ## 0.4.0
 
 A behaviour release. Widen your constraint to `^0.4` and read the upgrade notes.

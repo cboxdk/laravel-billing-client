@@ -95,17 +95,26 @@ return [
     | How a request resolves when the SDK can NEITHER take from the local lease NOR
     | reach billing to refill (an infrastructure fault, not an exhausted allowance):
     |
-    |   'allow' — fail OPEN: admit the request best-effort; usage is still buffered and
-    |             reconciled from the cumulative ledger once billing is reachable again.
-    |   'deny'  — fail CLOSED: refuse, for strict tenants that would rather block than
-    |             admit un-leased usage during an outage.
+    |   'last_known' — the default: enforce the allowance the client last knew. Admit up
+    |                  to the allowance minus what this client has drawn (the unspent
+    |                  lease is spent first), then refuse with QuotaExceeded on a hard-
+    |                  limit meter. A `bill`-overage or unlimited meter keeps admitting.
+    |                  With no known entitlement for the meter it refuses, as 'deny'.
+    |   'allow'      — fail OPEN: admit every request, even past the allowance.
+    |   'deny'       — fail CLOSED: refuse as soon as the local lease is spent.
     |
-    | An EXHAUSTED allowance (billing granted zero) is a semantic hard limit and always
-    | fails closed regardless of this policy — it is a denial, not an outage.
+    | Under every policy, usage is still buffered and reconciled from the cumulative
+    | ledger once billing is reachable again. An EXHAUSTED allowance (billing granted
+    | zero) is a semantic hard limit and always fails closed — a denial, not an outage.
+    |
+    | `snapshot_refresh` is how often (seconds) 'last_known' re-reads an organization's
+    | entitlements. The read rides on a lease refill, at most once per interval.
     |
     */
 
-    'fail' => env('BILLING_CLIENT_FAIL', 'allow'),
+    'fail' => env('BILLING_CLIENT_FAIL', 'last_known'),
+
+    'snapshot_refresh' => (int) env('BILLING_CLIENT_SNAPSHOT_REFRESH', 300),
 
     /*
     |--------------------------------------------------------------------------

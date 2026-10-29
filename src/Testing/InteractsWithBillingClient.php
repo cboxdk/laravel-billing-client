@@ -7,6 +7,7 @@ namespace Cbox\Billing\Client\Testing;
 use Cbox\Billing\Client\BillingClient;
 use Cbox\Billing\Client\BillingManagement;
 use Cbox\Billing\Client\Buffers\ArrayUsageBuffer;
+use Cbox\Billing\Client\Contracts\AllowanceSnapshots;
 use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Enums\FailurePolicy;
@@ -15,6 +16,7 @@ use Cbox\Billing\Client\Leasing\ReservationSweeper;
 use Cbox\Billing\Client\Reporting\UsageReporter;
 use Cbox\Billing\Client\Signals\NullBillingSignals;
 use Cbox\Billing\Client\Stores\ArrayReservationRegistry;
+use Cbox\Billing\Client\Stores\CacheAllowanceSnapshots;
 use Cbox\Billing\Client\Stores\CacheLeaseStore;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\Repository;
@@ -29,7 +31,7 @@ use Illuminate\Cache\Repository;
  *
  * Reservation ids are deterministic so buffered/reported usage asserts cleanly. Call
  * `$this->transport()->takeDown()` to simulate an unreachable billing service, flip
- * `$failurePolicy` to exercise the fail-open / fail-closed paths, set
+ * `$failurePolicy` to exercise the `last_known` / fail-open / fail-closed paths, set
  * `$this->billingNowMs` to drive the reservation-TTL clock, and use `$this->sweeper()`
  * to reclaim abandoned holds. `$this->makeBillingManagement()` builds the self-service
  * client over {@see FakeManagementTransport}.
@@ -50,6 +52,8 @@ trait InteractsWithBillingClient
     private ?LocalLeaseStore $billingStore = null;
 
     private ?BillingSignals $billingSignals = null;
+
+    private ?AllowanceSnapshots $billingSnapshots = null;
 
     private int $reservationIdSeq = 0;
 
@@ -80,6 +84,16 @@ trait InteractsWithBillingClient
         return $this->billingSignals ??= new NullBillingSignals;
     }
 
+    /**
+     * The last known allowance a `FailurePolicy::LastKnown` client enforces in an outage.
+     * Register the entitlement on the fake with `$this->transport()->entitlement(...)` so
+     * the client learns it on its first refill.
+     */
+    protected function allowanceSnapshots(): AllowanceSnapshots
+    {
+        return $this->billingSnapshots ??= new CacheAllowanceSnapshots(new Repository(new ArrayStore));
+    }
+
     /** Route the client's signals to a recording double and return it for assertions. */
     protected function recordSignals(): RecordingBillingSignals
     {
@@ -107,10 +121,12 @@ trait InteractsWithBillingClient
         $this->billingStore = $store;
         $this->billingReservationTtl = $reservationTtl;
 
+        $snapshots = $failurePolicy->enforcesLastKnown() ? $this->allowanceSnapshots() : null;
+
         $transport = $this->transport();
         $buffer = $this->usageBuffer();
 
-        $leases = new LeaseManager($transport, $store, $leaseSize, $refillThreshold, $locks, signals: $this->signals());
+        $leases = new LeaseManager($transport, $store, $leaseSize, $refillThreshold, $locks, signals: $this->signals(), snapshots: $snapshots);
         $reporter = new UsageReporter($transport, $buffer, $this->signals());
 
         return new BillingClient(
@@ -125,6 +141,7 @@ trait InteractsWithBillingClient
             signals: $this->signals(),
             reservationTtl: $reservationTtl,
             clock: fn (): int => $this->billingNowMs > 0 ? $this->billingNowMs : (int) round(microtime(true) * 1000),
+            snapshots: $snapshots,
         );
     }
 

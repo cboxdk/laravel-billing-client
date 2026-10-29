@@ -45,8 +45,8 @@ other drift is reporting lag, which the cumulative, self-correcting report close
   (`BillingManagement` + `BillingManager` facade) over its own transport seam, for
   letting a product app's users browse plans, subscribe, change, cancel, and read usage
   and invoices.
-- Configurable fail-open / fail-closed behaviour for the moment the SDK can neither
-  lease locally nor reach billing.
+- Outage enforcement from the last known allowance (or explicit fail-open / fail-closed)
+  for the moment the SDK can neither lease locally nor reach billing.
 
 ## Sections
 

@@ -6,6 +6,7 @@ namespace Cbox\Billing\Client\Tests\Fixtures;
 
 use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Testing\InteractsWithBillingClient;
+use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 
 /**
@@ -42,6 +43,18 @@ class BillingClientHarness
         $client->commit($set, ['api.calls' => 5, 'storage.gb' => 2]);
 
         return $this->sweeper()->sweep((int) round(microtime(true) * 1000));
+    }
+
+    public function outageHeadroom(): int
+    {
+        $this->transport()
+            ->grant('org_a', 'api.calls', 1_000)
+            ->entitlement('org_a', new Entitlement('api.calls', true, 1_000, 1.0, 'block'));
+
+        $client = $this->makeBillingClient(leaseSize: 100, failurePolicy: FailurePolicy::LastKnown);
+        $client->commit($client->reserve('org_a', 'api.calls', 5), 5);
+
+        return $this->allowanceSnapshots()->headroom('org_a', 'api.calls');
     }
 
     public function browsePlans(): int

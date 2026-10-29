@@ -45,8 +45,9 @@ This package is a **client**, not an authority — the Cbox Billing service is t
 source of truth; the SDK enforces a leased slice locally and reports usage.
 
 - **Deny-by-default on hard limits.** When a hard-limited meter can neither be leased
-  nor reached, enforcement fails **closed** (`QuotaExceeded`); the fail-open/closed
-  policy for infrastructure faults is configurable and defaults conservatively.
+  nor reached, enforcement fails **closed** (`QuotaExceeded`). For infrastructure faults
+  the policy is configurable; the default, `last_known`, keeps enforcing the allowance the
+  client last saw and refuses when it knows none.
 - **Bounded, documented overshoot.** Pessimistic leasing means outstanding leases can
   never exceed the central allowance; the accepted overshoot is `lease_size × nodes`
   and is documented, not hidden.

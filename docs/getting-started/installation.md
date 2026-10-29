@@ -28,7 +28,8 @@ php artisan vendor:publish --tag=billing-client-config
 | `lease_size` | `BILLING_CLIENT_LEASE_SIZE` | Units leased per refill. Larger → fewer round-trips, more overshoot. |
 | `refill_threshold` | `BILLING_CLIENT_REFILL_THRESHOLD` | Remaining balance at or below which a reserve tops the slice up. |
 | `report_interval` | `BILLING_CLIENT_REPORT_INTERVAL` | Suggested cadence (seconds) for the reporter. |
-| `fail` | `BILLING_CLIENT_FAIL` | `allow` (fail open) or `deny` (fail closed) on an outage. |
+| `fail` | `BILLING_CLIENT_FAIL` | Outage policy: `last_known` (default, enforce the last known allowance), `allow` (fail open) or `deny` (fail closed). See [Failure policy](../core-concepts/failure-policy.md). |
+| `snapshot_refresh` | `BILLING_CLIENT_SNAPSHOT_REFRESH` | Seconds between entitlement reads for `last_known` (default 300). |
 | `cache_store` | `BILLING_CLIENT_CACHE_STORE` | Cache store for the local counters/ledger (`null` = default). |
 | `prefix` | `BILLING_CLIENT_PREFIX` | Cache key prefix. |
 
