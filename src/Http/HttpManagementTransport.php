@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -21,9 +22,13 @@ use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\PreviewLine;
 use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
+use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
+use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
+use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
+use DateTimeInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
@@ -41,7 +46,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements ManagementTransport
+class HttpManagementTransport implements ManagementTransport, SubscriptionTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -165,6 +170,7 @@ class HttpManagementTransport implements ManagementTransport
             $this->intField($body, 'new_recurring_minor', $path),
             $this->date($body['effective_at'] ?? null),
             $lines,
+            $this->toDiscount($body['discount'] ?? null, $path),
         );
     }
 
@@ -190,6 +196,55 @@ class HttpManagementTransport implements ManagementTransport
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/cancel';
 
         return $this->toSubscription($this->post($path, ['at_period_end' => $atPeriodEnd]), $path);
+    }
+
+    /**
+     * `GET /api/v1/subscriptions?updated_since=&cursor=&limit=` answers the cursor envelope every
+     * list endpoint uses: `{data, has_more, next_cursor}`.
+     */
+    public function subscriptions(?DateTimeInterface $updatedSince = null, ?string $cursor = null, ?int $limit = null): SubscriptionPage
+    {
+        $path = '/api/v1/subscriptions';
+        $query = array_filter([
+            'updated_since' => $updatedSince?->format(DateTimeInterface::ATOM),
+            'cursor' => $cursor,
+            'limit' => $limit,
+        ], static fn (string|int|null $value): bool => $value !== null && $value !== '');
+
+        $body = $this->get($query === [] ? $path : $path.'?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986));
+
+        $rawRows = $body['data'] ?? null;
+
+        if (! is_array($rawRows)) {
+            throw TransportException::malformed($path, 'missing data array');
+        }
+
+        $rows = [];
+
+        foreach ($rawRows as $raw) {
+            if (is_array($raw)) {
+                $rows[] = $this->toSubscriptionChange($raw, $path);
+            }
+        }
+
+        $next = $body['next_cursor'] ?? null;
+
+        return new SubscriptionPage(
+            $rows,
+            ($body['has_more'] ?? false) === true,
+            is_string($next) && $next !== '' ? $next : null,
+        );
+    }
+
+    /**
+     * `POST /subscriptions/{org}/reactivate` answers with the subscription unwrapped, like
+     * `/cancel`. No body is sent.
+     */
+    public function reactivate(string $org): Subscription
+    {
+        $path = '/api/v1/subscriptions/'.rawurlencode($org).'/reactivate';
+
+        return $this->toSubscription($this->post($path, []), $path);
     }
 
     public function usage(string $org): UsageSummary
@@ -432,6 +487,59 @@ class HttpManagementTransport implements ManagementTransport
             periodStart: $this->date($raw['period_start'] ?? null),
             periodEnd: $this->date($raw['period_end'] ?? null),
             renewsAt: $this->date($raw['renews_at'] ?? null),
+            discount: $this->toDiscount($raw['discount'] ?? null, $path),
+            organizationRef: $this->nullableString($raw, 'organization_ref'),
+            pauseReason: $this->nullableString($raw, 'pause_reason'),
+            paused: ($raw['paused'] ?? false) === true,
+        );
+    }
+
+    /**
+     * One change-feed row. `id`, `organization_id` and `status` are required; the rest is
+     * optional, so a server that predates a field still parses.
+     *
+     * @param  array<array-key, mixed>  $raw
+     */
+    private function toSubscriptionChange(array $raw, string $path): SubscriptionChange
+    {
+        return new SubscriptionChange(
+            id: $this->intField($raw, 'id', $path),
+            organizationId: $this->stringField($raw, 'organization_id', $path),
+            organizationRef: $this->nullableString($raw, 'organization_ref'),
+            plan: $this->nullableString($raw, 'plan'),
+            product: $this->nullableString($raw, 'product'),
+            status: $this->stringField($raw, 'status', $path),
+            paused: ($raw['paused'] ?? false) === true,
+            pauseReason: $this->nullableString($raw, 'pause_reason'),
+            seats: $this->intOr($raw, 'seats', 1),
+            periodStart: $this->date($raw['period_start'] ?? null),
+            periodEnd: $this->date($raw['period_end'] ?? null),
+            cancelAtPeriodEnd: ($raw['cancel_at_period_end'] ?? false) === true,
+            trialEndsAt: $this->date($raw['trial_ends_at'] ?? null),
+            canceledAt: $this->date($raw['canceled_at'] ?? null),
+            discount: $this->toDiscount($raw['discount'] ?? null, $path),
+            updatedAt: $this->date($raw['updated_at'] ?? null),
+        );
+    }
+
+    /**
+     * The bound coupon, or null when there is none (or the server predates the field). A
+     * discount object without its `code` or `duration` is malformed, not absent.
+     */
+    private function toDiscount(mixed $raw, string $path): ?SubscriptionDiscount
+    {
+        if (! is_array($raw)) {
+            return null;
+        }
+
+        return new SubscriptionDiscount(
+            code: $this->stringField($raw, 'code', $path),
+            duration: $this->stringField($raw, 'duration', $path),
+            name: $this->nullableString($raw, 'name'),
+            percentOff: ($raw['percent_off'] ?? null) === null ? null : $this->intField($raw, 'percent_off', $path),
+            amountOffMinor: ($raw['amount_off_minor'] ?? null) === null ? null : $this->intField($raw, 'amount_off_minor', $path),
+            currency: $this->nullableString($raw, 'currency'),
+            endsAt: $this->date($raw['ends_at'] ?? null),
         );
     }
 
@@ -619,6 +727,16 @@ class HttpManagementTransport implements ManagementTransport
         $value = $body[$key] ?? null;
 
         return is_string($value) ? $value : $default;
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $body
+     */
+    private function nullableString(array $body, string $key): ?string
+    {
+        $value = $body[$key] ?? null;
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /**

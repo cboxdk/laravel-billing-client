@@ -74,6 +74,8 @@ $plans   = BillingManager::plans();
 $preview = BillingManager::previewChange('org_123', 'pro');
 $result  = BillingManager::subscribe('org_123', 'pro');   // + payment intent if due
 $usage   = BillingManager::usage('org_123');
+$back    = BillingManager::reactivate('org_123');          // undo a cancel or pause
+$changes = BillingManager::subscriptions(updatedSince: $lastSync); // sync every subscriber
 ```
 
 Collect payment either way — redirect to a billing-hosted checkout/portal session, or drive

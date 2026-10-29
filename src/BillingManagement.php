@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
+use Cbox\Billing\Client\Exceptions\UnsupportedOperation;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Invoice;
@@ -17,8 +19,12 @@ use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
+use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
+use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
+use DateTimeInterface;
+use Generator;
 
 /**
  * The app-facing self-service billing client — what a product app calls to let ITS
@@ -122,6 +128,70 @@ class BillingManagement
     }
 
     /**
+     * Reactivate `org`'s subscription: resume a pause, undo a scheduled period-end cancel, or
+     * bring back one canceled within the win-back window.
+     *
+     * @throws BillingRefused when billing refuses (no subscription → 404, not reactivatable → 409)
+     * @throws BillingUnavailable when billing cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see SubscriptionTransport}
+     */
+    public function reactivate(string $org): Subscription
+    {
+        return $this->subscriptionTransport(__FUNCTION__)->reactivate($org);
+    }
+
+    /**
+     * One page of the subscription change feed, oldest change first: every subscription changed
+     * at or after `$updatedSince` (all when null), continued from `$cursor`. Use it to mirror
+     * subscriber plans and statuses in a few calls instead of one `subscription()` per
+     * organization. Key your records on {@see SubscriptionChange::$organizationRef}.
+     *
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see SubscriptionTransport}
+     */
+    public function subscriptions(?DateTimeInterface $updatedSince = null, ?string $cursor = null, ?int $limit = null): SubscriptionPage
+    {
+        return $this->subscriptionTransport(__FUNCTION__)->subscriptions($updatedSince, $cursor, $limit);
+    }
+
+    /**
+     * Every subscription changed at or after `$updatedSince`, reading page after page as the
+     * caller iterates. Pages are fetched lazily, so breaking out early stops the requests; a
+     * failure on a later page throws from inside the loop.
+     *
+     * @return Generator<int, SubscriptionChange, mixed, void>
+     *
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see SubscriptionTransport}
+     */
+    public function allSubscriptions(?DateTimeInterface $updatedSince = null, ?int $pageSize = null): Generator
+    {
+        // Checked here, not inside the generator, so a missing contract throws at the call
+        // rather than on the first iteration.
+        return $this->drain($this->subscriptionTransport(__FUNCTION__), $updatedSince, $pageSize);
+    }
+
+    /**
+     * @return Generator<int, SubscriptionChange, mixed, void>
+     */
+    private function drain(SubscriptionTransport $transport, ?DateTimeInterface $updatedSince, ?int $pageSize): Generator
+    {
+        $cursor = null;
+
+        do {
+            $page = $transport->subscriptions($updatedSince, $cursor, $pageSize);
+
+            // Plain `yield`, not `yield from`: each page's list keys restart at 0, and repeated
+            // keys would collapse rows in iterator_to_array().
+            foreach ($page->data as $row) {
+                yield $row;
+            }
+
+            $cursor = $page->nextCursor;
+        } while ($page->hasMore && $cursor !== null);
+    }
+
+    /**
      * The organization's current-period usage per meter.
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
@@ -220,5 +290,19 @@ class BillingManagement
     public function removePaymentMethod(string $org, string $id): void
     {
         $this->transport->removePaymentMethod($org, $id);
+    }
+
+    /**
+     * The transport as a {@see SubscriptionTransport}. A custom {@see ManagementTransport}
+     * written against 0.4.1 does not have the 0.4.2 subscription endpoints; that is a clear
+     * error, not a silent no-op.
+     */
+    private function subscriptionTransport(string $method): SubscriptionTransport
+    {
+        if (! $this->transport instanceof SubscriptionTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, SubscriptionTransport::class, $method);
+        }
+
+        return $this->transport;
     }
 }

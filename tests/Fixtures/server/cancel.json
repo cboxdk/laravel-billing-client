@@ -2,8 +2,10 @@
     "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::cancel (at_period_end absent = true)",
     "request": "POST /api/v1/subscriptions/{org}/cancel",
     "status": 200,
-    "body": {"plan": "pro", "status": "active", "paused": false, "seats": 1,
+    "body": {"plan": "pro", "organization_ref": "org_a", "status": "active", "paused": false, "pause_reason": null, "seats": 1,
         "period_start": "2026-10-01T00:00:00+00:00", "period_end": "2026-11-01T00:00:00+00:00",
         "renews_at": null, "trial_ends_at": null, "canceled_at": null,
-        "pending_change": null, "add_ons": []}
+        "pending_change": null, "add_ons": [],
+        "discount": {"code": "SAVE20", "name": "Launch offer", "percent_off": 20, "amount_off_minor": null,
+            "currency": null, "duration": "repeating", "ends_at": "2027-01-01T00:00:00+00:00"}}
 }

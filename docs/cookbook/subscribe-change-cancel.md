@@ -80,6 +80,35 @@ $sub = BillingManager::subscription($org);
 $sub?->cancelsAtPeriodEnd(); // true
 ```
 
+## Reactivate
+
+A user who changes their mind before the period ends can undo the cancel. `reactivate()`
+also resumes a paused subscription and brings back one canceled within the win-back window:
+
+```php
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+
+try {
+    $sub = BillingManager::reactivate($org);
+    $sub->cancelsAtPeriodEnd(); // false
+} catch (BillingRefused $e) {
+    // 409: already active, nothing to undo. 404: no subscription at all.
+}
+```
+
+## Show the discount
+
+```php
+$discount = BillingManager::subscription($org)?->discount;   // ?SubscriptionDiscount
+
+if ($discount !== null) {
+    $label = $discount->isPercentage()
+        ? "{$discount->percentOff}% off"
+        : "{$discount->amountOffMinor} {$discount->currency} off";   // minor units
+    $until = $discount->endsAt?->format('Y-m-d');                     // null for forever
+}
+```
+
 ## Testing the flow offline
 
 The `FakeManagementTransport` reproduces the service invariants — proration, an

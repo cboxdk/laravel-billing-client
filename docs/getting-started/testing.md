@@ -53,7 +53,11 @@ production, and a fake cannot hand back a shape the server never sends.
 
 `FakeManagementTransport` answers as the management API does: an organization with no
 subscription reads as `null`, an unknown plan is a 404, a subscribe returns
-`payment_intent: null`, and cancel defaults to period end. It has `takeDown()` and
+`payment_intent: null`, and cancel defaults to period end. Reactivate undoes a period-end
+cancel or a pause and is a 409 on an active subscription. The change feed lists every
+subscription the fake has seen, pages by cursor, and reports `organization_ref` as the org
+you called with; pass a third argument to `withSubscription()` to set when a row last
+changed. It has `takeDown()` and
 `refuseWith()` too, and `requireProvisionedOrganizations()` to refuse a subscribe for an
 organization you never provisioned.
 

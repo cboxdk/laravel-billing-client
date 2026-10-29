@@ -203,4 +203,18 @@ it('subscribes, reads back, and cancels at period end by default', function (): 
 
     $canceled = (new BillingManagement($management))->cancel(contractOrg());
     expect($canceled->cancelsAtPeriodEnd())->toBeTrue();
+
+    // Reactivate undoes the period-end cancel, in the subscription shape.
+    [$status, $body] = contractRaw('POST', '/api/v1/subscriptions/'.rawurlencode(contractOrg()).'/reactivate');
+    expectShape('reactivate', $status, $body);
+    expect($management->subscription(contractOrg())?->cancelsAtPeriodEnd())->toBeFalse();
+
+    $management->cancel(contractOrg(), true);
+});
+
+it('serves the subscription change feed in the recorded shape', function (): void {
+    [$status, $body] = contractRaw('GET', '/api/v1/subscriptions?limit=1');
+    expectShape('subscriptions', $status, $body);
+
+    expect(contractManagement()->subscriptions(limit: 1)->data)->toBeArray();
 });
