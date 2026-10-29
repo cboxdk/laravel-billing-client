@@ -3,6 +3,27 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.3
+
+A patch release. Everything is additive: no existing signature or default changes, and the
+client still talks to an older server, which ignores the new fields.
+
+### Added
+
+- **Purchaser type and public-sector invoice data on the organization upsert.**
+  `ensureOrganization()` documents three optional attributes:
+  - `purchaser_type`: who the customer buys as, where that can exempt the sale. The values
+    are the tax engine's `PurchaserType` (`state_or_local_government`,
+    `charitable_organization`, `diplomatic_or_consular`, `public_body`, …). It asks the
+    place's own rule and never exempts by itself; most rules also need a verified exemption
+    certificate on file.
+  - `ean_number`: the 13-digit EAN location number (GLN) a Danish public body is invoiced
+    to. Billing validates the GS1 check digit and holds a DK public body's invoices until
+    it is set.
+  - `order_reference`: the purchase order or contact person printed on every invoice.
+- `FakeManagementTransport` stores and presents the three fields and mirrors the server's
+  validation: an unknown purchaser type or an EAN with a wrong check digit is a 422.
+
 ## 0.4.2
 
 A patch release. Everything is additive: no existing signature or default changes, and the

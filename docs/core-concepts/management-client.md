@@ -44,6 +44,24 @@ exist on the billing service — calling them for an unknown org throws a
 is an idempotent upsert (`PUT /api/v1/organizations/{org}`); call it once before the
 first billing action for a customer. It's the first step in every cookbook below.
 
+Three optional attributes describe who the customer buys as and what its invoices carry
+(0.4.3, additive):
+
+```php
+BillingManager::ensureOrganization('org_region', [
+    'name' => 'Region Hovedstaden',
+    'billing_country' => 'DK',
+    'purchaser_type' => 'public_body',      // the tax engine's PurchaserType values
+    'ean_number' => '5790000000005',        // 13-digit GLN, GS1 check digit validated
+    'order_reference' => 'Att. Jens Hansen', // printed on every invoice
+]);
+```
+
+`purchaser_type` asks the place's own tax rule and never exempts by itself: most rules
+need a verified exemption certificate on file. A Danish public body (`public_body` in
+`DK`) needs a valid `ean_number` before Billing issues its invoices; until then they are
+held.
+
 ## Multi-product instances & currency
 
 On a shared billing instance serving several products, your API token is **bound to one
