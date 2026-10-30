@@ -61,6 +61,19 @@ changed. It has `takeDown()` and
 `refuseWith()` too, and `requireProvisionedOrganizations()` to refuse a subscribe for an
 organization you never provisioned.
 
+Billing's tax answers are seeded with `withTax()`: a `PriceTax` for nobody in particular, an
+organization (`org:`) or a country (`country:`). The fake resolves the buyer as billing does (the
+organization's answer, else the country's, else nobody's) and works out each amount from the
+seeded rate. Without a seeded answer it sends no `tax`, like an older server. `taxUnavailable()`
+answers `unavailable`, as billing does while Cbox Tax is down.
+
+```php
+$fake = (new FakeManagementTransport)
+    ->withPlan(new Plan('standard', 'Standard', 3_900, 'DKK', 'month', []))
+    ->withTax(new PriceTax(TaxStatus::Calculated, TaxBasis::SellerDefault, 'DK', 'consumer', 'standard', '25'))
+    ->withTax(new PriceTax(TaxStatus::Calculated, TaxBasis::Customer, 'DE', 'business', 'reverse_charge'), org: 'org_de');
+```
+
 ## Testing an outage
 
 `makeBillingClient()` keeps `FailurePolicy::Allow` as its default, so existing suites

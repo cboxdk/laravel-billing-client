@@ -48,6 +48,21 @@
             "ends_at": "2026-11-15T00:00:00+00:00",
             "next": null,
             "next_from": "2026-11-15T00:00:00+00:00"
+        },
+        "recurring": {
+            "net_minor": 4900,
+            "currency": "EUR",
+            "tax": {
+                "status": "calculated",
+                "basis": "customer",
+                "country": "DK",
+                "customer": "business",
+                "treatment": "standard",
+                "rate": "25",
+                "tax_minor": 1225,
+                "total_minor": 6125,
+                "reason": null
+            }
         }
     }
 }
