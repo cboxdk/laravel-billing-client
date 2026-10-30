@@ -17,3 +17,6 @@ Practical, end-to-end recipes for the self-service [management client](../core-c
 - [Embedded payment element](embedded-payment-element.md) — take payment in-page: create
   an intent, mount the gateway element client-side, handle SCA, and confirm by webhook
   (path B).
+- [Show bundles and cancel consequences](show-bundles.md) — show a cross-product bundle
+  benefit, offer what the organization could add to save, and warn before a cancel that ends a
+  benefit elsewhere.

@@ -17,6 +17,10 @@ use DateTimeImmutable;
  * tenant key for the organization, the `{org}` you call with), the `pauseReason` (today only
  * `billing_address`) and whether it is `paused`. An older server omits them: they read as
  * null and false.
+ *
+ * Since 0.4.3 it carries `trialEndsAt`, a scheduled plan change (`pendingChange`), and the
+ * cross-product `bundle` benefit on it ({@see SubscriptionBundle}, null when no bundle discounts
+ * it). An older server omits them: they read as null.
  */
 readonly class Subscription
 {
@@ -30,7 +34,16 @@ readonly class Subscription
         public ?string $organizationRef = null,
         public ?string $pauseReason = null,
         public bool $paused = false,
+        public ?DateTimeImmutable $trialEndsAt = null,
+        public ?PendingChange $pendingChange = null,
+        public ?SubscriptionBundle $bundle = null,
     ) {}
+
+    /** True while the subscription is in a free trial. */
+    public function isTrialing(): bool
+    {
+        return $this->status === 'trialing';
+    }
 
     /** True when the subscription is set to lapse at period end (no renewal scheduled). */
     public function cancelsAtPeriodEnd(): bool

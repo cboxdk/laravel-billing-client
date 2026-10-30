@@ -4,19 +4,23 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client\Http;
 
+use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\BillingPeriod;
+use Cbox\Billing\Client\ValueObjects\CancelPreview;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
+use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
+use Cbox\Billing\Client\ValueObjects\PendingChange;
 use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\PreviewLine;
@@ -46,7 +50,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements ManagementTransport, SubscriptionTransport
+class HttpManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -171,6 +175,7 @@ class HttpManagementTransport implements ManagementTransport, SubscriptionTransp
             $this->date($body['effective_at'] ?? null),
             $lines,
             $this->toDiscount($body['discount'] ?? null, $path),
+            BundlePayload::consequences($body['consequences'] ?? null, $path),
         );
     }
 
@@ -245,6 +250,35 @@ class HttpManagementTransport implements ManagementTransport, SubscriptionTransp
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/reactivate';
 
         return $this->toSubscription($this->post($path, []), $path);
+    }
+
+    /**
+     * `GET /api/v1/organizations/{org}/bundles?product=&locale=`: the bundle benefits and offers.
+     */
+    public function bundles(string $org, ?string $product = null, ?string $locale = null): OrganizationBundles
+    {
+        $path = '/api/v1/organizations/'.rawurlencode($org).'/bundles';
+        $query = array_filter(['product' => $product, 'locale' => $locale], static fn (?string $value): bool => $value !== null && $value !== '');
+
+        return BundlePayload::organizationBundles(
+            $this->get($query === [] ? $path : $path.'?'.http_build_query($query, '', '&', PHP_QUERY_RFC3986)),
+            $path,
+        );
+    }
+
+    /**
+     * `POST /api/v1/subscriptions/{org}/cancel/preview`: changes nothing.
+     */
+    public function previewCancel(string $org, bool $atPeriodEnd = true, ?string $locale = null): CancelPreview
+    {
+        $path = '/api/v1/subscriptions/'.rawurlencode($org).'/cancel/preview';
+        $payload = ['mode' => $atPeriodEnd ? 'period_end' : 'immediate'];
+
+        if ($locale !== null && $locale !== '') {
+            $payload['locale'] = $locale;
+        }
+
+        return BundlePayload::cancelPreview($this->post($path, $payload), $path);
     }
 
     public function usage(string $org): UsageSummary
@@ -491,7 +525,20 @@ class HttpManagementTransport implements ManagementTransport, SubscriptionTransp
             organizationRef: $this->nullableString($raw, 'organization_ref'),
             pauseReason: $this->nullableString($raw, 'pause_reason'),
             paused: ($raw['paused'] ?? false) === true,
+            trialEndsAt: $this->date($raw['trial_ends_at'] ?? null),
+            pendingChange: $this->toPendingChange($raw['pending_change'] ?? null),
+            bundle: BundlePayload::subscriptionBundle($raw['bundle'] ?? null, $path),
         );
+    }
+
+    /** A scheduled plan change, or null when none is scheduled (or the server predates it). */
+    private function toPendingChange(mixed $raw): ?PendingChange
+    {
+        if (! is_array($raw) || ! is_string($raw['plan'] ?? null)) {
+            return null;
+        }
+
+        return new PendingChange($raw['plan'], $this->date($raw['effective_at'] ?? null));
     }
 
     /**
@@ -519,6 +566,8 @@ class HttpManagementTransport implements ManagementTransport, SubscriptionTransp
             canceledAt: $this->date($raw['canceled_at'] ?? null),
             discount: $this->toDiscount($raw['discount'] ?? null, $path),
             updatedAt: $this->date($raw['updated_at'] ?? null),
+            reference: $this->nullableString($raw, 'reference'),
+            bundle: BundlePayload::subscriptionBundle($raw['bundle'] ?? null, $path),
         );
     }
 

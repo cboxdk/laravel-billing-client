@@ -16,6 +16,9 @@ use DateTimeImmutable;
  * the other endpoints with), or on {@see organizationKey()}, which falls back to Billing's id for
  * an organization provisioned without one. `plan` and `product` are keys, null when the plan was
  * removed. `status` uses the same words as {@see Subscription::$status}.
+ *
+ * Since 0.4.3 it carries the `reference` (what inside the organization it is for, such as a Sites
+ * website; null for the organization itself) and the `bundle` benefit on it.
  */
 readonly class SubscriptionChange
 {
@@ -36,6 +39,8 @@ readonly class SubscriptionChange
         public ?DateTimeImmutable $canceledAt = null,
         public ?SubscriptionDiscount $discount = null,
         public ?DateTimeImmutable $updatedAt = null,
+        public ?string $reference = null,
+        public ?SubscriptionBundle $bundle = null,
     ) {}
 
     /** Your tenant key for the organization, or Billing's organization id when it has none. */

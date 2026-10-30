@@ -2,9 +2,25 @@
     "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::store",
     "request": "POST /api/v1/subscriptions",
     "status": 201,
-    "body": {"subscription": {"plan": "pro", "organization_ref": "org_b", "status": "active", "paused": false, "pause_reason": null, "seats": 1,
-        "period_start": "2026-10-28T00:00:00+00:00", "period_end": "2026-11-28T00:00:00+00:00",
-        "renews_at": "2026-11-28T00:00:00+00:00", "trial_ends_at": null, "canceled_at": null,
-        "pending_change": null, "add_ons": [], "discount": null},
-        "coupon": null, "payment_intent": null}
+    "body": {
+        "subscription": {
+            "plan": "pro",
+            "organization_ref": "org_b",
+            "status": "active",
+            "paused": false,
+            "pause_reason": null,
+            "seats": 1,
+            "period_start": "2026-10-28T00:00:00+00:00",
+            "period_end": "2026-11-28T00:00:00+00:00",
+            "renews_at": "2026-11-28T00:00:00+00:00",
+            "trial_ends_at": null,
+            "canceled_at": null,
+            "pending_change": null,
+            "add_ons": [],
+            "discount": null,
+            "bundle": null
+        },
+        "coupon": null,
+        "payment_intent": null
+    }
 }

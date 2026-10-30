@@ -3,6 +3,41 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.3
+
+A patch release. Everything is additive: no existing signature or default changes, and the
+client still talks to an older server.
+
+### Added
+
+- **Cross-product bundles.** `BillingManagement::bundles(string $org, ?string $product = null,
+  ?string $locale = null): OrganizationBundles` reads `GET /api/v1/organizations/{org}/bundles`:
+  the benefits on the organization's subscriptions (`active`, a list of `ActiveBundle`) and what it
+  could add to save (`offers`, a list of `BundleOffer` of kind `add_product`, `unlock` or
+  `multi_product`, with `BundleOfferPlan`s carrying prices and a checkout link). Copy comes
+  ready to render in the requested language.
+- **Cancel consequences.** `BillingManagement::previewCancel(string $org, bool $atPeriodEnd = true,
+  ?string $locale = null): CancelPreview` calls `POST /api/v1/subscriptions/{org}/cancel/preview`:
+  when the subscription ends and the `BundleConsequence`s on the organization's other
+  subscriptions (lost or reduced, from when, the price before and after, a `message` to show).
+  `ChangePreview` gains an optional `consequences` list for a downgrade that ends a benefit.
+- `Subscription` gains optional trailing `trialEndsAt`, `pendingChange` (a `PendingChange` with
+  the plan key and `effectiveAt`) and `bundle` (a `SubscriptionBundle`), plus `isTrialing()`.
+- `SubscriptionChange` gains optional trailing `reference` (what inside the organization it is for,
+  such as a Sites website) and `bundle`.
+- `Contracts\BundleTransport`, implemented by `HttpManagementTransport` and
+  `FakeManagementTransport`. `BillingManagement` throws `UnsupportedOperation` for the two new
+  calls on a transport that does not implement it.
+- `FakeManagementTransport::withBundles()` and `withConsequences()`, and the fake presents
+  `trial_ends_at`, `pending_change`, `reference` and `bundle` from what it was seeded with.
+
+### Upgrade notes
+
+- Nothing to change. Apps that read `trial_ends_at` or `pending_change` with a raw HTTP call can
+  use `Subscription::$trialEndsAt` and `Subscription::$pendingChange` instead.
+- The recorded server fixtures now carry `bundle`, `pending_change` and `consequences`, and two new
+  fixtures record the bundles endpoint and the cancel preview.
+
 ## 0.4.2
 
 A patch release. Everything is additive: no existing signature or default changes, and the
