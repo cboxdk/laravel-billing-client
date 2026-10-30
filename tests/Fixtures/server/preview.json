@@ -3,7 +3,31 @@
     "request": "POST /api/v1/subscriptions/{org}/preview",
     "status": 200,
     "body": {
-        "due_now_minor": 2400,
+        "due_now_minor": 3000,
+        "due_now_net_minor": 2400,
+        "due_now_tax_minor": 600,
+        "due_now_tax": {
+            "status": "calculated",
+            "basis": "customer",
+            "country": "DK",
+            "customer": "business",
+            "treatment": "standard",
+            "rate": "25",
+            "tax_minor": 600,
+            "total_minor": 3000,
+            "reason": null
+        },
+        "new_recurring_tax": {
+            "status": "calculated",
+            "basis": "customer",
+            "country": "DK",
+            "customer": "business",
+            "treatment": "standard",
+            "rate": "25",
+            "tax_minor": 1225,
+            "total_minor": 6125,
+            "reason": null
+        },
         "credit_minor": 2500,
         "new_recurring_minor": 4900,
         "effective_at": "2026-10-28T12:00:00+00:00",

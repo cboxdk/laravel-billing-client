@@ -15,6 +15,11 @@ use DateTimeImmutable;
  * subscription keeps across the change (null when none, or from an older server). Since 0.4.4
  * it carries the bundle `consequences`: the benefits the change takes from the organization's
  * other subscriptions. Show each one's `message` before the customer confirms.
+ *
+ * Since 0.4.6: `dueNowMinor` includes tax; `dueNowNetMinor` and `dueNowTaxMinor` split it (null
+ * from an older server). The `lines`, `creditMinor` and `newRecurringMinor` are net. A preview
+ * (not a change) also carries `dueNowTax` (null when nothing is due) and `newRecurringTax`, the
+ * tax on the new recurring price ({@see PriceTax}).
  */
 readonly class ChangePreview
 {
@@ -30,5 +35,9 @@ readonly class ChangePreview
         public array $lines,
         public ?SubscriptionDiscount $discount = null,
         public array $consequences = [],
+        public ?int $dueNowNetMinor = null,
+        public ?int $dueNowTaxMinor = null,
+        public ?PriceTax $dueNowTax = null,
+        public ?PriceTax $newRecurringTax = null,
     ) {}
 }

@@ -91,8 +91,44 @@ the plan does not grant it, `true` for a granted boolean feature, the `int` or `
 granted config feature. `0` is a granted limit of zero. A server older than features sends none,
 and `features` is an empty array.
 
-`taxInclusive: false` means the amount excludes VAT. To show a consumer price including VAT,
-apply the rate yourself (25 % for Danish moms). `null` means the server did not say.
+`taxInclusive: false` means the amount excludes VAT. `null` means the server did not say.
+
+## Prices with tax
+
+Billing works out the tax on every price it shows, through Cbox Tax, the same way the customer's
+invoice is taxed. Show what the customer pays instead of adding a rate yourself:
+
+```php
+// For a billing account: its country, business or consumer status and a VAT number billing
+// validated (VIES) decide the tax. For a visitor: a consumer in that country. Neither: a consumer
+// in the seller's own country (Denmark, 25 % moms).
+$plans = BillingManager::plans('DKK', org: $billingOrg);
+$plans = BillingManager::plans('DKK', country: 'SE');
+$plans = BillingManager::plans('DKK');
+
+$plan->grossMinor();          // 4875: what the buyer pays, tax included; null when not known
+$plan->tax->status;           // TaxStatus::Calculated, Pending or Unavailable
+$plan->tax->basis;            // TaxBasis::Customer, Country or SellerDefault
+$plan->tax->treatment;        // 'standard', 'reverse_charge', 'not_registered', …
+$plan->tax->rate;             // '25'
+$plan->tax->isReverseCharge(); // an EU business with a validated VAT number: no VAT charged
+```
+
+Only a `Calculated` answer carries amounts. `Pending` (the place cannot be taxed from what billing
+knows) and `Unavailable` (Cbox Tax did not answer) leave the price net: say that the price excludes
+VAT rather than showing it as final. A Billing server that predates tax on prices sends no `tax`,
+and `$plan->tax` is `null`.
+
+The subscription read carries the same for what the subscription costs per period
+(`$subscription->recurring`, a `RecurringPrice`: `netMinor` after the bundle benefit and the
+coupon, `tax`, and `totalMinor()`), a change preview splits what is due now
+(`dueNowMinor` includes tax, `dueNowNetMinor`, `dueNowTaxMinor`, `dueNowTax`) and taxes the new
+price (`newRecurringTax`), and an invoice has `subtotalMinor` and `taxMinor` beside its total
+`amountMinor`.
+
+Naming a buyer needs a transport that implements `Contracts\TaxedPlanTransport`, as the HTTP
+transport and the fake do; `plans()` throws `UnsupportedOperation` otherwise. The tax depends on the
+buyer, so cache a per-organization answer briefly, if at all.
 
 Billing sends a signed `plan.changed` webhook, one per changed plan, when a plan's prices,
 entitlements, features, name, interval, product or active state change. A catalog apply that

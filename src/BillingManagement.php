@@ -7,6 +7,7 @@ namespace Cbox\Billing\Client;
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
+use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -45,15 +46,29 @@ class BillingManagement
     ) {}
 
     /**
-     * List the subscribable plans.
+     * List the subscribable plans, each with the tax its buyer pays ({@see Plan::$tax}).
+     *
+     * Since 0.4.6 name the buyer: `$org` (a billing account; its country, business or consumer
+     * status and a VAT number billing validated decide the tax), or `$country` (an anonymous
+     * visitor, priced as a consumer there). With neither, billing prices for a consumer in the
+     * seller's own country.
      *
      * @return list<Plan>
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when a buyer is named and the transport does not implement {@see TaxedPlanTransport}
      */
-    public function plans(?string $currency = null): array
+    public function plans(?string $currency = null, ?string $org = null, ?string $country = null): array
     {
-        return $this->transport->plans($currency);
+        if (($org === null || $org === '') && ($country === null || $country === '')) {
+            return $this->transport->plans($currency);
+        }
+
+        if (! $this->transport instanceof TaxedPlanTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, TaxedPlanTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->plansFor($currency, $org, $country);
     }
 
     /**

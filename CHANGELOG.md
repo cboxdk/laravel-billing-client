@@ -3,6 +3,46 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.6
+
+A patch release. Everything is additive: no existing signature or default changes, and the
+client still talks to an older server.
+
+### Added
+
+- **Prices with tax.** Billing works out the tax on the prices it shows through Cbox Tax, the way
+  the customer's invoice is taxed. `Plan` gains an optional trailing `tax` (`PriceTax`) and
+  `Plan::grossMinor()`, what the buyer pays with tax (`null` when the tax is not known).
+- `BillingManagement::plans()` takes optional `$org` (a billing account: its country, business or
+  consumer status and validated VAT number decide the tax) and `$country` (an anonymous buyer,
+  priced as a consumer there). With neither, billing prices for a consumer in the seller's own
+  country. Naming a buyer needs the new `Contracts\TaxedPlanTransport` (`plansFor()`), which
+  `HttpManagementTransport` and `FakeManagementTransport` implement; another transport throws
+  `UnsupportedOperation`.
+- `PriceTax`: `status` (`Enums\TaxStatus`: `Calculated`, `Pending`, `Unavailable`), `basis`
+  (`Enums\TaxBasis`: `Customer`, `Country`, `SellerDefault`), `country`, `customer`, `treatment`
+  (`standard`, `reverse_charge`, …), `rate`, `taxMinor`, `totalMinor`, `reason`, and
+  `isCalculated()`, `isReverseCharge()`, `chargesTax()`. Only a calculated answer has amounts; an
+  answer whose status or basis the client does not know reads as `null`.
+- `Subscription` gains an optional trailing `recurring` (`RecurringPrice`: `netMinor` after the
+  bundle benefit and coupon, `currency`, `tax`, `totalMinor()`), read from the subscription read.
+- `ChangePreview` gains optional trailing `dueNowNetMinor`, `dueNowTaxMinor`, `dueNowTax` and
+  `newRecurringTax`. `dueNowMinor` has always included tax; the lines, the credit and
+  `newRecurringMinor` are net.
+- `Invoice` gains optional trailing `subtotalMinor` and `taxMinor` (`amountMinor` is the total).
+- `FakeManagementTransport::withTax(PriceTax $tax, ?string $org = null, ?string $country = null)`
+  seeds billing's answer per buyer and prices every plan, subscription and preview from its rate;
+  `taxUnavailable()` answers `unavailable`. Unseeded, the fake sends no `tax`.
+
+### Upgrade notes
+
+- Nothing to change. Against a server without tax, `tax`, `recurring` and the new preview and
+  invoice fields read as `null`.
+- Show `grossMinor()` (or `recurring->totalMinor()`) instead of adding a VAT rate yourself, and say
+  the price excludes VAT when the tax is `Pending` or `Unavailable`.
+- The recorded server fixtures (`plans`, `subscription`, `preview`, `change`, `invoices`) carry the
+  new fields.
+
 ## 0.4.5
 
 A patch release. Everything is additive: no existing signature or default changes, and the

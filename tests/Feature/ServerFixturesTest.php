@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Cbox\Billing\Client\BillingManagement;
+use Cbox\Billing\Client\Enums\TaxBasis;
+use Cbox\Billing\Client\Enums\TaxStatus;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
@@ -24,6 +26,7 @@ use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\PendingChange;
 use Cbox\Billing\Client\ValueObjects\Plan;
+use Cbox\Billing\Client\ValueObjects\PriceTax;
 use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionBundle;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
@@ -182,6 +185,10 @@ function seededManagementFake(): FakeManagementTransport
 
     return (new FakeManagementTransport)
         ->withPlan(new Plan('starter', 'Starter', 2_500, 'EUR', 'month', [new Entitlement('api.calls', true, 10_000, 1.0, 'block')], ['sites.pages' => 15, 'sites.whitelabel' => false], 'cbox-sites', false))
+        // Billing prices the catalog's tax for nobody in particular (a consumer in Denmark) and the
+        // organization's for org_a, a Danish business.
+        ->withTax(new PriceTax(TaxStatus::Calculated, TaxBasis::SellerDefault, 'DK', 'consumer', 'standard', '25'))
+        ->withTax(new PriceTax(TaxStatus::Calculated, TaxBasis::Customer, 'DK', 'business', 'standard', '25'), org: 'org_a')
         ->withPlan(new Plan('pro', 'Pro', 4_900, 'EUR', 'month', [new Entitlement('api.calls', true, 100_000, 1.0, 'bill')], ['sites.pages' => 250, 'sites.whitelabel' => true], 'cbox-sites', false))
         ->withSubscription('org_a', new Subscription(
             'starter', 'active', $start, $start->modify('+1 month'), $start->modify('+1 month'),

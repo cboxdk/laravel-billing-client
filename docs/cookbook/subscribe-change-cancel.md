@@ -27,7 +27,9 @@ foreach ($plans as $plan) {
 ```
 
 Prices are integer **minor units** (e.g. cents) — format them at the edge, never as
-floats.
+floats. `priceMinor` is net; show `$plan->grossMinor()`, what the customer pays with tax, and pass
+the customer's billing account (`plans(org: $org)`) so it is their tax. See
+[Prices with tax](../core-concepts/management-client.md#prices-with-tax).
 
 ## Subscribe
 
@@ -53,8 +55,9 @@ net due-now, the prorated credit, the new recurring amount, and itemized lines:
 ```php
 $preview = BillingManager::previewChange($org, 'scale');
 
-// $preview->dueNowMinor, $preview->creditMinor, $preview->newRecurringMinor,
-// $preview->effectiveAt, and $preview->lines (each: description + signed amountMinor)
+// $preview->dueNowMinor (tax included: $preview->dueNowNetMinor + $preview->dueNowTaxMinor),
+// $preview->creditMinor, $preview->newRecurringMinor (net; with tax: $preview->newRecurringTax),
+// $preview->effectiveAt, and $preview->lines (net, each: description + signed amountMinor)
 foreach ($preview->lines as $line) {
     // $line->description, $line->amountMinor  (credits are negative)
 }

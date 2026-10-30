@@ -21,6 +21,10 @@ use DateTimeImmutable;
  * Since 0.4.4 it carries `trialEndsAt`, a scheduled plan change (`pendingChange`), and the
  * cross-product `bundle` benefit on it ({@see SubscriptionBundle}, null when no bundle discounts
  * it). An older server omits them: they read as null.
+ *
+ * Since 0.4.6 a subscription read (`subscription()`) carries `recurring`: what it costs per
+ * period with the tax ({@see RecurringPrice}). Null from an older server, and on the responses
+ * that do not price it (subscribe, change, cancel, the change feed).
  */
 readonly class Subscription
 {
@@ -37,6 +41,7 @@ readonly class Subscription
         public ?DateTimeImmutable $trialEndsAt = null,
         public ?PendingChange $pendingChange = null,
         public ?SubscriptionBundle $bundle = null,
+        public ?RecurringPrice $recurring = null,
     ) {}
 
     /** True while the subscription is in a free trial. */

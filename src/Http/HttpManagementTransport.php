@@ -7,6 +7,7 @@ namespace Cbox\Billing\Client\Http;
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
+use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -50,7 +51,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport
+class HttpManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport, TaxedPlanTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -61,7 +62,17 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, S
 
     public function plans(?string $currency = null): array
     {
-        $query = $currency !== null && $currency !== '' ? '?currency='.rawurlencode(strtoupper($currency)) : '';
+        return $this->plansFor($currency);
+    }
+
+    public function plansFor(?string $currency = null, ?string $org = null, ?string $country = null): array
+    {
+        $params = array_filter([
+            'currency' => $currency !== null && $currency !== '' ? strtoupper($currency) : null,
+            'org' => $org !== null && $org !== '' ? $org : null,
+            'country' => $country !== null && $country !== '' ? strtoupper($country) : null,
+        ], static fn (?string $value): bool => $value !== null);
+        $query = $params === [] ? '' : '?'.http_build_query($params, '', '&', PHP_QUERY_RFC3986);
         $body = $this->get('/api/v1/plans'.$query);
 
         $rawPlans = $body['plans'] ?? $body['data'] ?? null;
@@ -176,6 +187,10 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, S
             $lines,
             $this->toDiscount($body['discount'] ?? null, $path),
             BundlePayload::consequences($body['consequences'] ?? null, $path),
+            TaxPayload::int($body['due_now_net_minor'] ?? null),
+            TaxPayload::int($body['due_now_tax_minor'] ?? null),
+            TaxPayload::priceTax($body['due_now_tax'] ?? null),
+            TaxPayload::priceTax($body['new_recurring_tax'] ?? null),
         );
     }
 
@@ -332,6 +347,8 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, S
                     $this->intField($raw, 'amount_minor', $path),
                     $this->stringOr($raw, 'currency', ''),
                     $this->stringOr($raw, 'status', 'open'),
+                    TaxPayload::int($raw['subtotal_minor'] ?? null),
+                    TaxPayload::int($raw['tax_minor'] ?? null),
                 );
             }
         }
@@ -510,6 +527,7 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, S
             features: $this->toFeatures($raw['features'] ?? null),
             product: is_string($raw['product'] ?? null) ? $raw['product'] : null,
             taxInclusive: is_bool($price['tax_inclusive'] ?? null) ? $price['tax_inclusive'] : null,
+            tax: TaxPayload::priceTax($raw['tax'] ?? null),
         );
     }
 
@@ -556,6 +574,7 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, S
             trialEndsAt: $this->date($raw['trial_ends_at'] ?? null),
             pendingChange: $this->toPendingChange($raw['pending_change'] ?? null),
             bundle: BundlePayload::subscriptionBundle($raw['bundle'] ?? null, $path),
+            recurring: TaxPayload::recurring($raw['recurring'] ?? null),
         );
     }
 
