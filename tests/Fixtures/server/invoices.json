@@ -2,6 +2,19 @@
     "source": "app/Http/Controllers/Api/Management/InvoiceController.php + CursorPage::envelope",
     "request": "GET /api/v1/invoices/{org}",
     "status": 200,
-    "body": {"data": [{"number": "CB-2026-0042", "date": "2026-10-01T00:00:00+00:00", "amount_minor": 4900, "currency": "EUR", "status": "paid"}],
-        "has_more": false, "next_cursor": null}
+    "body": {
+        "data": [
+            {
+                "number": "CB-2026-0042",
+                "date": "2026-10-01T00:00:00+00:00",
+                "amount_minor": 4900,
+                "currency": "EUR",
+                "status": "paid",
+                "subtotal_minor": 3920,
+                "tax_minor": 980
+            }
+        ],
+        "has_more": false,
+        "next_cursor": null
+    }
 }

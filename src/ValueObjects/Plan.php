@@ -20,6 +20,10 @@ namespace Cbox\Billing\Client\ValueObjects;
  * quotes the price including tax (`false`: net, tax is added at invoicing). Both are `null` when
  * the server does not say.
  *
+ * Since 0.4.6 `tax` is the tax the buyer pays on the price ({@see PriceTax}), for the buyer the
+ * catalog was read for: an organization, a visitor's country, or the seller's default. Show
+ * {@see grossMinor()} rather than taxing `priceMinor` yourself. `null` from an older server.
+ *
  * The constructor is cheap, and every field after `entitlements` is optional, so a test can
  * build a plan without the newer fields.
  */
@@ -39,7 +43,14 @@ readonly class Plan
         public array $features = [],
         public ?string $product = null,
         public ?bool $taxInclusive = null,
+        public ?PriceTax $tax = null,
     ) {}
+
+    /** What the buyer pays, tax included; null when the tax is not known (pending, unavailable, an older server). */
+    public function grossMinor(): ?int
+    {
+        return $this->tax?->isCalculated() === true ? $this->tax->totalMinor : null;
+    }
 
     /** The entitlement this plan grants for `$meter`, or `null` when it grants none. */
     public function entitlement(string $meter): ?Entitlement

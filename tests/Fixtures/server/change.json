@@ -5,6 +5,8 @@
     "body": {
         "scheduled": false,
         "due_now_minor": 2400,
+        "due_now_net_minor": 2400,
+        "due_now_tax_minor": 0,
         "credit_minor": 2500,
         "new_recurring_minor": 4900,
         "effective_at": "2026-10-28T12:00:00+00:00",

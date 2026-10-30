@@ -7,6 +7,9 @@ namespace Cbox\Billing\Client\Testing;
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
+use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
+use Cbox\Billing\Client\Enums\TaxBasis;
+use Cbox\Billing\Client\Enums\TaxStatus;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
@@ -22,6 +25,7 @@ use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
+use Cbox\Billing\Client\ValueObjects\PriceTax;
 use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
@@ -65,12 +69,17 @@ use Illuminate\Http\Client\Request;
  *    {@see expireSessions()}); setup/payment intents come back `requires_action`; stored
  *    payment methods list, re-default, and remove, and an unknown id is a 404.
  *
+ *  - Tax (0.4.6): seed what billing answers with {@see withTax()} (for nobody in particular, an
+ *    organization or a country) and the fake prices every plan, subscription and preview from
+ *    that answer's rate. Without a seeded answer it sends no `tax`, as an older server does.
+ *    {@see taxUnavailable()} answers `unavailable`, as billing does when Cbox Tax is down.
+ *
  * Seed the world with {@see withPlan()}, {@see withSubscription()}, {@see withUsage()},
  * {@see withInvoice()}, and {@see withPaymentMethod()} before driving the client. Call
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport
+class FakeManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport, TaxedPlanTransport
 {
     private const string BASE_URL = 'https://billing.fake';
 
@@ -132,6 +141,38 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
 
     /** @var array<string, list<BundleConsequence>> */
     private array $consequences = [];
+
+    /**
+     * The tax answers seeded with {@see withTax()}, keyed `org:{org}`, `country:{CC}` or `` (nobody).
+     *
+     * @var array<string, PriceTax>
+     */
+    private array $taxes = [];
+
+    private bool $taxUnavailable = false;
+
+    /**
+     * Seed the tax billing answers with, for `$org` (an organization), a consumer in `$country`,
+     * or (both null) nobody in particular. `$tax` is a template: its status, basis, country,
+     * customer, treatment and rate are sent as given, and each price's `tax_minor` and
+     * `total_minor` are worked out from its rate (no rate: no tax). The real amounts come from
+     * Cbox Tax; this only stands in for them. A buyer resolves as billing does: the organization's
+     * answer, else the country's, else nobody's.
+     */
+    public function withTax(PriceTax $tax, ?string $org = null, ?string $country = null): self
+    {
+        $this->taxes[self::taxKey($org, $country)] = $tax;
+
+        return $this;
+    }
+
+    /** Answer every tax `unavailable` (`tax_calculation_unavailable`), as billing does while Cbox Tax is down. */
+    public function taxUnavailable(bool $unavailable = true): self
+    {
+        $this->taxUnavailable = $unavailable;
+
+        return $this;
+    }
 
     /**
      * Seed what `bundles(org)` answers. Without it, an organization has no benefits and no offers.
@@ -255,6 +296,11 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
     public function plans(?string $currency = null): array
     {
         return $this->wire()->plans($currency);
+    }
+
+    public function plansFor(?string $currency = null, ?string $org = null, ?string $country = null): array
+    {
+        return $this->wire()->plansFor($currency, $org, $country);
     }
 
     public function ensureOrganization(string $org, array $attributes): void
@@ -442,9 +488,12 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
             ));
         }
 
+        $org = is_string($query['org'] ?? null) && $query['org'] !== '' ? $query['org'] : null;
+        $country = is_string($query['country'] ?? null) && $query['country'] !== '' ? strtoupper($query['country']) : null;
+
         return FakeResponse::json([
             'currency' => $requested ?? ($plans[0]->currency ?? 'DKK'),
-        ] + $this->page(array_map($this->presentPlan(...), $plans)));
+        ] + $this->page(array_map(fn (Plan $plan): array => $this->presentPlan($plan) + $this->taxBlock('tax', $plan->priceMinor, $org, $country), $plans)));
     }
 
     /**
@@ -497,7 +546,12 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
             return FakeResponse::error(404, 'This organization has no active subscription.');
         }
 
-        return FakeResponse::json($this->presentSubscription($org, $subscription));
+        $plan = $this->plans[$subscription->plan] ?? null;
+        $tax = $plan === null ? null : $this->taxFor($plan->priceMinor, $org, null);
+
+        return FakeResponse::json($this->presentSubscription($org, $subscription) + [
+            'recurring' => $plan === null ? null : ['net_minor' => $plan->priceMinor, 'currency' => $plan->currency] + ($tax === null ? [] : ['tax' => $tax]),
+        ]);
     }
 
     /**
@@ -550,7 +604,19 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
             return FakeResponse::error(404, 'Unknown plan.');
         }
 
-        return FakeResponse::json($this->presentPreview($org, $target));
+        $preview = $this->presentPreview($org, $target);
+        $net = $this->dueNowNet($org, $target);
+        $dueNow = $this->taxFor($net, $org, null);
+
+        if ($dueNow !== null && is_int($dueNow['total_minor'])) {
+            $preview['due_now_minor'] = $dueNow['total_minor'];
+            $preview['due_now_tax_minor'] = $dueNow['tax_minor'];
+        }
+
+        return FakeResponse::json($preview + [
+            'due_now_tax' => $net > 0 ? $dueNow : null,
+            'new_recurring_tax' => $this->taxFor($target->priceMinor, $org, null),
+        ]);
     }
 
     /**
@@ -830,6 +896,8 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
                 'number' => $invoice->number,
                 'date' => $this->date($invoice->date),
                 'amount_minor' => $invoice->amountMinor,
+                'subtotal_minor' => $invoice->subtotalMinor ?? $invoice->amountMinor,
+                'tax_minor' => $invoice->taxMinor ?? 0,
                 'currency' => $invoice->currency,
                 'status' => $invoice->status,
             ],
@@ -1070,8 +1138,12 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
             $lines[] = ['description' => 'Credit for unused '.$currentPlan->name, 'minor' => -$credit];
         }
 
+        $dueNow = $this->dueNowNet($org, $target);
+
         return [
-            'due_now_minor' => max(0, $target->priceMinor - $credit),
+            'due_now_minor' => $dueNow,
+            'due_now_net_minor' => $dueNow,
+            'due_now_tax_minor' => 0,
             'credit_minor' => $credit,
             'new_recurring_minor' => $target->priceMinor,
             'effective_at' => $this->date(new DateTimeImmutable),
@@ -1080,6 +1152,75 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
             'discount' => $this->presentDiscount($current?->discount),
             'consequences' => $this->presentConsequences($org),
         ];
+    }
+
+    /** What a change to `$target` charges now, net: its price less the current plan's, never below zero. */
+    private function dueNowNet(string $org, Plan $target): int
+    {
+        $current = $this->subscriptions[$org] ?? null;
+        $currentPlan = $current !== null ? ($this->plans[$current->plan] ?? null) : null;
+
+        return max(0, $target->priceMinor - ($currentPlan->priceMinor ?? 0));
+    }
+
+    /**
+     * `[$key => tax]` for a price, or nothing when no answer is seeded (an older server).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function taxBlock(string $key, int $netMinor, ?string $org, ?string $country): array
+    {
+        $tax = $this->taxFor($netMinor, $org, $country);
+
+        return $tax === null ? [] : [$key => $tax];
+    }
+
+    /**
+     * The tax answer for a net price, as billing sends it: the seeded answer for the buyer with
+     * its amounts worked out from its rate, `unavailable` while {@see taxUnavailable()}, or null
+     * when none is seeded.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function taxFor(int $netMinor, ?string $org, ?string $country): ?array
+    {
+        $template = ($org !== null ? ($this->taxes[self::taxKey($this->taxOrganization($org), null)] ?? null) : null)
+            ?? ($country !== null ? ($this->taxes[self::taxKey(null, $country)] ?? null) : null)
+            ?? ($this->taxes[''] ?? null);
+
+        if ($this->taxUnavailable) {
+            return (new PriceTax(TaxStatus::Unavailable, $template->basis ?? TaxBasis::SellerDefault, $template?->country, $template->customer ?? 'consumer', reason: 'tax_calculation_unavailable'))->toArray();
+        }
+
+        if ($template === null) {
+            return null;
+        }
+
+        if ($template->status !== TaxStatus::Calculated) {
+            return $template->withAmounts(null, null)->toArray();
+        }
+
+        $tax = $template->rate === null || ! is_numeric($template->rate) ? 0 : (int) round($netMinor * (float) $template->rate / 100);
+
+        return $template->withAmounts($tax, $netMinor + $tax)->toArray();
+    }
+
+    /**
+     * The organization a tax answer is seeded under for `$org` as this fake keys it. A subclass
+     * that keys subscriptions by something finer (an organization and a website) maps it back.
+     */
+    protected function taxOrganization(string $org): string
+    {
+        return $org;
+    }
+
+    private static function taxKey(?string $org, ?string $country): string
+    {
+        return match (true) {
+            $org !== null => 'org:'.$org,
+            $country !== null => 'country:'.strtoupper($country),
+            default => '',
+        };
     }
 
     /**
