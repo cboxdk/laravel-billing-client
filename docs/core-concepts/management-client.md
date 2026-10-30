@@ -70,6 +70,36 @@ another product's plan keys. Pass a currency to `plans('USD')` (and
 `createCheckoutSession(..., currency: 'USD')`) to price the catalog — a plan not priced
 in that currency is omitted rather than shown at a fabricated rate.
 
+## Plan features and caching the catalog
+
+Billing is the source of truth for your plans: prices, metered entitlements and features. Each
+`Plan` carries its `features` map, the key of its `product`, and `taxInclusive`, so you can
+cache the catalog instead of hard-coding limits:
+
+```php
+$plan = collect(BillingManager::plans('DKK'))->firstWhere('key', 'sites-standard');
+
+$plan->featureInt('sites.pages');      // 15: an integer limit (0 when not granted)
+$plan->hasFeature('sites.forms');      // true: granted
+$plan->feature('sites.whitelabel');    // false: not granted
+$plan->feature('sites.unknown');       // null: the server does not list it
+$plan->taxInclusive;                   // false: the price is net, tax is added at invoicing
+```
+
+The server lists every feature any plan of your product grants, deny-by-default: `false` when
+the plan does not grant it, `true` for a granted boolean feature, the `int` or `string` value of a
+granted config feature. `0` is a granted limit of zero. A server older than features sends none,
+and `features` is an empty array.
+
+`taxInclusive: false` means the amount excludes VAT. To show a consumer price including VAT,
+apply the rate yourself (25 % for Danish moms). `null` means the server did not say.
+
+Billing sends a signed `plan.changed` webhook, one per changed plan, when a plan's prices,
+entitlements, features, name, interval, product or active state change. A catalog apply that
+changes nothing sends none. Subscribe an endpoint to it, filtered to your product, and refresh
+your cache from `plans()` when it arrives. This package does not receive webhooks; verify and
+route them in your app. The payload and signing are in Cbox Billing's webhook docs.
+
 ## The transport seam
 
 Like the enforcement path, the network lives behind one contract — `ManagementTransport`

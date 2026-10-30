@@ -18,6 +18,32 @@ function makeHttpManagement(): HttpManagementTransport
     );
 }
 
+it('parses plan features, product and tax convention, and tolerates a server without them', function (): void {
+    Http::fake([
+        'billing.test/api/v1/plans' => Http::response([
+            'currency' => 'DKK',
+            'data' => [
+                ['key' => 'sites-pro', 'name' => 'Pro', 'interval' => 'month', 'product' => 'cbox-sites',
+                    'entitlements' => [],
+                    'features' => ['sites.pages' => 250, 'sites.whitelabel' => true, 'sites.theme' => 'dark', 'sites.forms' => false, 'bad' => 1.5, 'nested' => ['x' => 1]],
+                    'price' => ['minor' => 9_900, 'currency' => 'DKK', 'tax_inclusive' => false]],
+                ['key' => 'legacy', 'name' => 'Legacy', 'interval' => 'month', 'entitlements' => [],
+                    'price' => ['minor' => 100, 'currency' => 'DKK']],
+            ],
+            'has_more' => false, 'next_cursor' => null,
+        ]),
+    ]);
+
+    [$pro, $legacy] = makeHttpManagement()->plans();
+
+    expect($pro->features)->toBe(['sites.forms' => false, 'sites.pages' => 250, 'sites.theme' => 'dark', 'sites.whitelabel' => true])
+        ->and($pro->product)->toBe('cbox-sites')
+        ->and($pro->taxInclusive)->toBeFalse()
+        ->and($legacy->features)->toBe([])
+        ->and($legacy->product)->toBeNull()
+        ->and($legacy->taxInclusive)->toBeNull();
+});
+
 it('lists plans over HTTP with a bearer token', function (): void {
     Http::fake([
         'billing.test/api/v1/plans' => Http::response([
