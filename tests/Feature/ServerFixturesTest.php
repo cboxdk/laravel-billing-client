@@ -83,6 +83,8 @@ it('parses the recorded reserve, commit and usage responses', function (): void 
 it('parses every recorded management response', function (): void {
     expect(managementReplaying('plans')->plans()[0]->priceMinor)->toBe(4_900);
 
+    expect(managementReplaying('plans')->plans()[0]->featureInt('sites.pages'))->toBe(250);
+
     expect(managementReplaying('subscription')->subscription('org_a')?->plan)->toBe('pro');
 
     expect(managementReplaying('subscription')->subscription('org_a')?->discount?->percentOff)->toBe(20);
@@ -179,8 +181,8 @@ function seededManagementFake(): FakeManagementTransport
     $start = new DateTimeImmutable('2026-10-01T00:00:00+00:00');
 
     return (new FakeManagementTransport)
-        ->withPlan(new Plan('starter', 'Starter', 2_500, 'EUR', 'month', [new Entitlement('api.calls', true, 10_000, 1.0, 'block')]))
-        ->withPlan(new Plan('pro', 'Pro', 4_900, 'EUR', 'month', [new Entitlement('api.calls', true, 100_000, 1.0, 'bill')]))
+        ->withPlan(new Plan('starter', 'Starter', 2_500, 'EUR', 'month', [new Entitlement('api.calls', true, 10_000, 1.0, 'block')], ['sites.pages' => 15, 'sites.whitelabel' => false], 'cbox-sites', false))
+        ->withPlan(new Plan('pro', 'Pro', 4_900, 'EUR', 'month', [new Entitlement('api.calls', true, 100_000, 1.0, 'bill')], ['sites.pages' => 250, 'sites.whitelabel' => true], 'cbox-sites', false))
         ->withSubscription('org_a', new Subscription(
             'starter', 'active', $start, $start->modify('+1 month'), $start->modify('+1 month'),
             discount: new SubscriptionDiscount('SAVE20', 'repeating', 'Launch offer', 20, endsAt: new DateTimeImmutable('2027-01-01T00:00:00+00:00')),

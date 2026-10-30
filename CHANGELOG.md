@@ -3,6 +3,31 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.5
+
+A patch release. Everything is additive: no existing signature or default changes, and the
+client still talks to an older server.
+
+### Added
+
+- **Plan features.** `Plan` gains optional trailing `features` (`array<string, int|string|bool|null>`),
+  `product` (the product key) and `taxInclusive` (whether the seller quotes the price including
+  tax), read from `GET /api/v1/plans`. Billing lists every feature any plan of the product grants,
+  deny-by-default: `false` not granted, `true` a granted boolean feature, the value of a granted
+  config feature. Cache the catalog instead of hard-coding limits.
+- `Plan::feature(string $key)` (the value, `null` when unlisted), `Plan::hasFeature(string $key)`
+  and `Plan::featureInt(string $key)` (an integer limit, `0` when not granted).
+- `FakeManagementTransport` presents `product`, `features` and `price.tax_inclusive` for the plans
+  it is seeded with.
+- Docs: caching the catalog and refreshing it on Billing's `plan.changed` webhook. The package
+  does not receive webhooks; your app verifies and routes them.
+
+### Upgrade notes
+
+- Nothing to change. A server without features gives an empty `features` map, a `null` `product`
+  and a `null` `taxInclusive`.
+- The recorded `plans` server fixture now carries `product`, `features` and `price.tax_inclusive`.
+
 ## 0.4.4
 
 A patch release. Everything is additive: no existing signature or default changes, and the

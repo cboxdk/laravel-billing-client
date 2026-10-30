@@ -507,7 +507,35 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, S
             currency: isset($price['currency']) && is_string($price['currency']) ? $price['currency'] : $this->stringOr($raw, 'currency', ''),
             interval: $this->stringOr($raw, 'interval', ''),
             entitlements: $entitlements,
+            features: $this->toFeatures($raw['features'] ?? null),
+            product: is_string($raw['product'] ?? null) ? $raw['product'] : null,
+            taxInclusive: is_bool($price['tax_inclusive'] ?? null) ? $price['tax_inclusive'] : null,
         );
+    }
+
+    /**
+     * A plan's `{key: value}` feature map. A server that predates features sends none (an empty
+     * map); an entry whose key or value is not a feature value is skipped rather than guessed.
+     *
+     * @return array<string, int|string|bool|null>
+     */
+    private function toFeatures(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+
+        $features = [];
+
+        foreach ($raw as $key => $value) {
+            if (is_string($key) && $key !== '' && (is_int($value) || is_string($value) || is_bool($value) || $value === null)) {
+                $features[$key] = $value;
+            }
+        }
+
+        ksort($features);
+
+        return $features;
     }
 
     /**

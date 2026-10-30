@@ -32,6 +32,36 @@ it('lists plans with their entitlements', function (): void {
         ->and($plans[1]->entitlement('api.calls')?->allowance)->toBe(100_000);
 });
 
+it('lists plans with their features, product and tax convention', function (): void {
+    $this->managementTransport()->withPlan(new Plan('sites-standard', 'Standard', 3_900, 'usd', 'month', [], [
+        'sites.pages' => 15, 'sites.custom_domains' => 0, 'sites.forms' => true, 'sites.whitelabel' => false,
+    ], 'cbox-sites', false));
+
+    $plan = collect($this->makeBillingManagement()->plans())->firstWhere('key', 'sites-standard');
+
+    expect($plan)->toBeInstanceOf(Plan::class)
+        ->and($plan->product)->toBe('cbox-sites')
+        ->and($plan->taxInclusive)->toBeFalse()
+        ->and($plan->feature('sites.pages'))->toBe(15)
+        ->and($plan->featureInt('sites.pages'))->toBe(15)
+        ->and($plan->featureInt('sites.custom_domains'))->toBe(0)
+        ->and($plan->hasFeature('sites.custom_domains'))->toBeTrue()
+        ->and($plan->hasFeature('sites.forms'))->toBeTrue()
+        ->and($plan->hasFeature('sites.whitelabel'))->toBeFalse()
+        ->and($plan->featureInt('sites.whitelabel'))->toBe(0)
+        ->and($plan->feature('sites.unknown'))->toBeNull()
+        ->and($plan->hasFeature('sites.unknown'))->toBeFalse()
+        ->and($plan->featureInt('sites.unknown'))->toBeNull();
+});
+
+it('reads a plan without features as an empty map', function (): void {
+    $plan = $this->makeBillingManagement()->plans()[0];
+
+    expect($plan->features)->toBe([])
+        ->and($plan->product)->toBeNull()
+        ->and($plan->hasFeature('anything'))->toBeFalse();
+});
+
 it('returns null for an org with no subscription', function (): void {
     expect($this->makeBillingManagement()->subscription('org_a'))->toBeNull();
 });

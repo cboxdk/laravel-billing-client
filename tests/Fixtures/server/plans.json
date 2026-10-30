@@ -3,8 +3,9 @@
     "request": "GET /api/v1/plans",
     "status": 200,
     "body": {"currency": "EUR", "data": [
-        {"key": "pro", "name": "Pro", "interval": "month",
+        {"key": "pro", "name": "Pro", "interval": "month", "product": "cbox-sites",
          "entitlements": {"api.calls": {"enabled": true, "allowance": 100000, "weight": 1.0, "overage": "bill"}},
-         "price": {"minor": 4900, "currency": "EUR"}}
+         "features": {"sites.custom_domains": 5, "sites.forms": true, "sites.pages": 250, "sites.whitelabel": false},
+         "price": {"minor": 4900, "currency": "EUR", "tax_inclusive": false}}
     ], "has_more": false, "next_cursor": null}
 }

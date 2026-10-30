@@ -1097,12 +1097,17 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
 
         ksort($entitlements);
 
+        $features = $plan->features;
+        ksort($features);
+
         return [
             'key' => $plan->key,
             'name' => $plan->name,
             'interval' => $plan->interval,
+            'product' => $plan->product,
             'entitlements' => $entitlements,
-            'price' => ['minor' => $plan->priceMinor, 'currency' => $plan->currency],
+            'features' => $features,
+            'price' => ['minor' => $plan->priceMinor, 'currency' => $plan->currency, 'tax_inclusive' => $plan->taxInclusive ?? false],
         ];
     }
 

@@ -14,8 +14,8 @@ use RuntimeException;
  */
 final readonly class ServerFixture
 {
-    /** Keys whose children are keyed by data (meter keys), not by field names. */
-    private const array MAPS = ['meters', 'entitlements'];
+    /** Keys whose children are keyed by data (meter and feature keys), not by field names. */
+    private const array MAPS = ['meters', 'entitlements', 'features'];
 
     /**
      * @param  array<string, mixed>  $body
