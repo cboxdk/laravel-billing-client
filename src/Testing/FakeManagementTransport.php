@@ -6,6 +6,7 @@ namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Enums\TaxBasis;
@@ -21,6 +22,7 @@ use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
+use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
@@ -79,7 +81,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport, TaxedPlanTransport
+class FakeManagementTransport implements BundleTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport
 {
     private const string BASE_URL = 'https://billing.fake';
 
@@ -308,6 +310,11 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
         $this->wire()->ensureOrganization($org, $attributes);
     }
 
+    public function upsertOrganization(string $org, array $attributes): OrganizationProfile
+    {
+        return $this->wire()->upsertOrganization($org, $attributes);
+    }
+
     public function subscription(string $org): ?Subscription
     {
         return $this->wire()->subscription($org);
@@ -423,7 +430,7 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
         return match (true) {
             $method === 'GET' && $segments === ['plans'] => $this->listPlans($query),
             $method === 'GET' && $segments === ['subscriptions'] => $this->listSubscriptionChanges($query),
-            $method === 'PUT' && $count === 2 && $resource === 'organizations' => $this->upsertOrganization($segments[1], $payload),
+            $method === 'PUT' && $count === 2 && $resource === 'organizations' => $this->storeOrganization($segments[1], $payload),
             $method === 'GET' && $count === 2 && $resource === 'subscriptions' => $this->showSubscription($segments[1]),
             $method === 'POST' && $segments === ['subscriptions'] => $this->storeSubscription($payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'preview' => $this->preview($segments[1], $payload),
@@ -499,7 +506,7 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
     /**
      * @param  array<array-key, mixed>  $payload
      */
-    private function upsertOrganization(string $org, array $payload): FakeResponse
+    private function storeOrganization(string $org, array $payload): FakeResponse
     {
         if ($this->string($payload, 'name') === '') {
             return FakeResponse::validation('name', 'The name field is required.');
@@ -1283,11 +1290,21 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
             'external_ref' => $attributes['external_ref'] ?? null,
             'name' => $attributes['name'] ?? null,
             'billing_email' => $attributes['billing_email'] ?? null,
+            'billing_address_line1' => $attributes['billing_address_line1'] ?? null,
+            'billing_address_line2' => $attributes['billing_address_line2'] ?? null,
+            'billing_postal_code' => $attributes['billing_postal_code'] ?? null,
+            'billing_city' => $attributes['billing_city'] ?? null,
+            'billing_subdivision' => $attributes['billing_subdivision'] ?? null,
             'billing_country' => $attributes['billing_country'] ?? null,
             'billing_currency' => $attributes['billing_currency'] ?? null,
+            'locale' => $attributes['locale'] ?? null,
             'purchaser_type' => $attributes['purchaser_type'] ?? null,
             'ean_number' => $attributes['ean_number'] ?? null,
             'order_reference' => $attributes['order_reference'] ?? null,
+            'revenue_class' => $attributes['revenue_class'] ?? 'customer',
+            'tax_id' => $attributes['tax_id'] ?? null,
+            'tax_id_validated' => isset($attributes['tax_id']) ? false : null,
+            'account' => 'owned',
         ];
     }
 

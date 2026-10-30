@@ -44,6 +44,12 @@ exist on the billing service — calling them for an unknown org throws a
 is an idempotent upsert (`PUT /api/v1/organizations/{org}`); call it once before the
 first billing action for a customer. It's the first step in every cookbook below.
 
+To show what billing stores (an app's own billing page), use `upsertOrganization($org,
+$attributes)`, the same call with billing's answer: an `OrganizationProfile` with the billing
+email, address, `taxId` and `taxIdValidated`, and `shared` when another product owns the account
+(the contact and address then read null). Send `tax_id` to set the VAT number; billing checks it
+against the register, and `taxIdSupported` is false on a server that does not take it.
+
 Three optional attributes describe who the customer buys as and what its invoices carry
 (0.4.3, additive):
 

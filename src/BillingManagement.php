@@ -6,6 +6,7 @@ namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
@@ -17,6 +18,7 @@ use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
+use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
@@ -88,6 +90,24 @@ class BillingManagement
     public function ensureOrganization(string $org, array $attributes): void
     {
         $this->transport->ensureOrganization($org, $attributes);
+    }
+
+    /**
+     * {@see ensureOrganization()} with billing's answer: what it stores for the organization
+     * (billing email, address, VAT number and its verdict), and whether the account is shared
+     * with the product that owns it. Since 0.4.6. `tax_id` needs a server that takes it.
+     *
+     * @param  array<string, mixed>  $attributes  billing's field names; `name` is required
+     *
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     */
+    public function upsertOrganization(string $org, array $attributes): OrganizationProfile
+    {
+        if (! $this->transport instanceof OrganizationProfileTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OrganizationProfileTransport::class, 'upsertOrganization');
+        }
+
+        return $this->transport->upsertOrganization($org, $attributes);
     }
 
     /**

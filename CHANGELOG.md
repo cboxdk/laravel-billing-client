@@ -33,6 +33,12 @@ client still talks to an older server.
 - `FakeManagementTransport::withTax(PriceTax $tax, ?string $org = null, ?string $country = null)`
   seeds billing's answer per buyer and prices every plan, subscription and preview from its rate;
   `taxUnavailable()` answers `unavailable`. Unseeded, the fake sends no `tax`.
+- `BillingManagement::upsertOrganization()`: `ensureOrganization()` with billing's answer, as an
+  `OrganizationProfile` (billing email, address, VAT number and its verdict, and whether the
+  account is shared). A new `OrganizationProfileTransport` contract, so an older custom transport
+  keeps compiling; it gets an `UnsupportedOperation`.
+- `tax_id` on the organization upsert, for a server that takes it.
+- `FakeManagementTransport` presents the address, `tax_id` and `account` on the organization.
 
 ### Upgrade notes
 
