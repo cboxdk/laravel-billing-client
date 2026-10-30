@@ -9,15 +9,23 @@ use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Cbox\Billing\Client\Testing\FakeBillingTransport;
 use Cbox\Billing\Client\Testing\FakeManagementTransport;
 use Cbox\Billing\Client\Tests\Support\ServerFixture;
+use Cbox\Billing\Client\ValueObjects\ActiveBundle;
+use Cbox\Billing\Client\ValueObjects\BundleBenefit;
+use Cbox\Billing\Client\ValueObjects\BundleConsequence;
+use Cbox\Billing\Client\ValueObjects\BundleOffer;
+use Cbox\Billing\Client\ValueObjects\BundleOfferPlan;
 use Cbox\Billing\Client\ValueObjects\CumulativeUsage;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterActual;
 use Cbox\Billing\Client\ValueObjects\MeterEstimate;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
+use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
+use Cbox\Billing\Client\ValueObjects\PendingChange;
 use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\Subscription;
+use Cbox\Billing\Client\ValueObjects\SubscriptionBundle;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
 use Illuminate\Http\Client\Factory as HttpFactory;
 
@@ -81,6 +89,35 @@ it('parses every recorded management response', function (): void {
 
     expect(managementReplaying('reactivate')->reactivate('org_r')->cancelsAtPeriodEnd())->toBeFalse();
 
+    $subscription = managementReplaying('subscription')->subscription('org_a');
+    expect($subscription?->bundle?->benefit?->label)->toBe('Included with Cbox Billing')
+        ->and($subscription?->bundle?->benefit?->isFree())->toBeTrue()
+        ->and($subscription?->bundle?->benefit?->requires)->toBe('cbox-billing')
+        ->and($subscription?->bundle?->isEnding())->toBeTrue()
+        ->and($subscription?->pendingChange?->plan)->toBe('starter')
+        ->and($subscription?->pendingChange?->effectiveAt?->format('Y-m-d'))->toBe('2026-11-01')
+        ->and($subscription?->trialEndsAt)->toBeNull();
+
+    $feedRow = managementReplaying('subscriptions')->subscriptions()->data[0];
+    expect($feedRow->reference)->toBeNull()
+        ->and($feedRow->bundle?->benefit?->percentOff)->toBe(100);
+
+    $cancelPreview = managementReplaying('cancel-preview')->previewCancel('org_a');
+    expect($cancelPreview->mode)->toBe('period_end')
+        ->and($cancelPreview->hasConsequences())->toBeTrue()
+        ->and($cancelPreview->consequences[0]->lost)->toBeTrue()
+        ->and($cancelPreview->consequences[0]->priceAfterMinor)->toBe(21_900)
+        ->and($cancelPreview->consequences[0]->before?->rule)->toBe('billing-includes-tax');
+
+    expect(managementReplaying('preview')->previewChange('org_a', 'pro')->consequences[0]->product)->toBe('cbox-tax');
+
+    $bundles = managementReplaying('bundles')->bundles('org_a');
+    expect($bundles->activeFor('cbox-tax')?->bundle->benefit?->label)->toBe('Included with Cbox Billing')
+        ->and($bundles->offersOfKind('add_product')[0]->plans[0]->isFree())->toBeTrue()
+        ->and($bundles->offersOfKind('add_product')[0]->plans[0]->checkoutUrl)->toContain('/billing/upgrade')
+        ->and($bundles->offersOfKind('multi_product')[0]->productsToAdd)->toBe(['cbox-sites' => 'Cbox Sites'])
+        ->and($bundles->offersOfKind('multi_product')[0]->productsNeeded)->toBe(1);
+
     expect(fn () => managementReplaying('reactivate-conflict')->reactivate('org_a'))->toThrow(BillingRefused::class);
 
     expect(managementReplaying('subscriptions')->subscriptions()->data[0]->organizationRef)->toBe('org_a');
@@ -118,6 +155,25 @@ it('reads the recorded 401 as a refusal', function (): void {
     expect(fn () => managementReplaying('unauthenticated')->plans())->toThrow(BillingRefused::class);
 });
 
+function fixtureBenefit(?string $requires = 'cbox-billing'): BundleBenefit
+{
+    return new BundleBenefit('billing-includes-tax', 'product', 'Included with Cbox Billing', 21_900, 0, 'DKK', percentOff: 100, requires: $requires);
+}
+
+function fixtureBundle(): SubscriptionBundle
+{
+    return new SubscriptionBundle(fixtureBenefit(), new DateTimeImmutable('2026-11-15T00:00:00+00:00'), null, new DateTimeImmutable('2026-11-15T00:00:00+00:00'));
+}
+
+function fixtureConsequence(): BundleConsequence
+{
+    return new BundleConsequence(
+        lost: true, from: new DateTimeImmutable('2026-11-15T00:00:00+00:00'), message: 'Cbox Tax is no longer included from 15 Nov 2026.',
+        priceBeforeMinor: 0, priceAfterMinor: 21_900, currency: 'DKK', subscription: 'sub_3b5d7f9h1j3l5n7p9r1t3v5x',
+        product: 'cbox-tax', productName: 'Cbox Tax', plan: 'tax-starter', before: fixtureBenefit(),
+    );
+}
+
 function seededManagementFake(): FakeManagementTransport
 {
     $start = new DateTimeImmutable('2026-10-01T00:00:00+00:00');
@@ -128,7 +184,22 @@ function seededManagementFake(): FakeManagementTransport
         ->withSubscription('org_a', new Subscription(
             'starter', 'active', $start, $start->modify('+1 month'), $start->modify('+1 month'),
             discount: new SubscriptionDiscount('SAVE20', 'repeating', 'Launch offer', 20, endsAt: new DateTimeImmutable('2027-01-01T00:00:00+00:00')),
+            pendingChange: new PendingChange('starter', $start->modify('+1 month')),
+            bundle: fixtureBundle(),
         ), $start->modify('+27 days'))
+        ->withConsequences('org_a', fixtureConsequence())
+        ->withBundles('org_a', new OrganizationBundles(
+            organization: '01JBX7Q3W9T0S2M4V6Y8Z1A3C5',
+            currency: 'DKK',
+            locale: 'en',
+            active: [new ActiveBundle(fixtureBundle(), 'sub_3b5d7f9h1j3l5n7p9r1t3v5x', 'cbox-tax', 'tax-starter')],
+            offers: [new BundleOffer(
+                rule: 'billing-includes-tax', kind: 'add_product', headline: 'Add Cbox Tax, free with your Billing plan',
+                label: 'Included with Cbox Billing', percentOff: 100, product: 'cbox-tax', productName: 'Cbox Tax', discountedProduct: 'cbox-tax',
+                plans: [new BundleOfferPlan('tax-starter', 'Starter', 21_900, 0, 'DKK', 'https://billing.test/billing/upgrade?plan=tax-starter')],
+            )],
+            organizationRef: 'org_a',
+        ))
         // A period-end cancel, so reactivate has something to undo.
         ->withSubscription('org_r', new Subscription('starter', 'active', $start, $start->modify('+1 month'), null), $start->modify('+28 days'))
         ->withUsage('org_a', 'api.calls', new MeterUsage(750, 1_000, 0))
@@ -148,6 +219,8 @@ dataset('management endpoints', [
     'change' => ['change', 'POST', '/api/v1/subscriptions/org_a/change', ['plan' => 'pro']],
     'cancel' => ['cancel', 'POST', '/api/v1/subscriptions/org_a/cancel', []],
     'reactivate' => ['reactivate', 'POST', '/api/v1/subscriptions/org_r/reactivate', []],
+    'cancel preview' => ['cancel-preview', 'POST', '/api/v1/subscriptions/org_a/cancel/preview', []],
+    'bundles' => ['bundles', 'GET', '/api/v1/organizations/org_a/bundles', []],
     'reactivate conflict' => ['reactivate-conflict', 'POST', '/api/v1/subscriptions/org_a/reactivate', []],
     'usage' => ['usage-summary', 'GET', '/api/v1/usage/org_a', []],
     'invoices' => ['invoices', 'GET', '/api/v1/invoices/org_a', []],

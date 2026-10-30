@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client\Testing;
 
+use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
+use Cbox\Billing\Client\ValueObjects\BundleConsequence;
+use Cbox\Billing\Client\ValueObjects\CancelPreview;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
+use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
@@ -66,7 +70,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements ManagementTransport, SubscriptionTransport
+class FakeManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport
 {
     private const string BASE_URL = 'https://billing.fake';
 
@@ -122,6 +126,33 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
     private int $sessionSeq = 0;
 
     private ?HttpManagementTransport $wire = null;
+
+    /** @var array<string, OrganizationBundles> */
+    private array $bundles = [];
+
+    /** @var array<string, list<BundleConsequence>> */
+    private array $consequences = [];
+
+    /**
+     * Seed what `bundles(org)` answers. Without it, an organization has no benefits and no offers.
+     */
+    public function withBundles(string $org, OrganizationBundles $bundles): self
+    {
+        $this->bundles[$org] = $bundles;
+
+        return $this;
+    }
+
+    /**
+     * Seed the bundle consequences a cancel preview, a change preview and a change of `org`'s
+     * subscription report. Without it there are none.
+     */
+    public function withConsequences(string $org, BundleConsequence ...$consequences): self
+    {
+        $this->consequences[$org] = array_values($consequences);
+
+        return $this;
+    }
 
     public function withPlan(Plan $plan): self
     {
@@ -266,6 +297,16 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
         return $this->wire()->reactivate($org);
     }
 
+    public function bundles(string $org, ?string $product = null, ?string $locale = null): OrganizationBundles
+    {
+        return $this->wire()->bundles($org, $product, $locale);
+    }
+
+    public function previewCancel(string $org, bool $atPeriodEnd = true, ?string $locale = null): CancelPreview
+    {
+        return $this->wire()->previewCancel($org, $atPeriodEnd, $locale);
+    }
+
     public function usage(string $org): UsageSummary
     {
         return $this->wire()->usage($org);
@@ -343,6 +384,8 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'change' => $this->change($segments[1], $payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'cancel' => $this->cancelSubscription($segments[1], $payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'reactivate' => $this->reactivateSubscription($segments[1]),
+            $method === 'POST' && $count === 4 && $resource === 'subscriptions' && $action === 'cancel' && $segments[3] === 'preview' => $this->cancelPreview($segments[1], $payload),
+            $method === 'GET' && $count === 3 && $resource === 'organizations' && $action === 'bundles' => $this->showBundles($segments[1], $query),
             $method === 'GET' && $count === 2 && $resource === 'usage' => $this->usageSummary($segments[1]),
             $method === 'GET' && $count === 2 && $resource === 'invoices' => $this->listInvoices($segments[1]),
             $method === 'POST' && $segments === ['checkout-sessions'] => $this->checkoutSession($payload),
@@ -538,6 +581,7 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             renewsAt: $current->periodEnd,
             discount: $current->discount,
             organizationRef: $current->organizationRef,
+            bundle: $current->bundle,
         );
         $this->record($org, $this->subscriptions[$org]);
 
@@ -574,6 +618,9 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             organizationRef: $current->organizationRef,
             pauseReason: $current->pauseReason,
             paused: $current->paused,
+            trialEndsAt: $current->trialEndsAt,
+            pendingChange: $current->pendingChange,
+            bundle: $current->bundle,
         );
 
         if ($atPeriodEnd) {
@@ -585,7 +632,53 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
 
         $this->record($org, $updated, $atPeriodEnd ? null : $now);
 
-        return FakeResponse::json($this->presentSubscription($org, $updated, $atPeriodEnd ? null : $now));
+        return FakeResponse::json($this->presentSubscription($org, $updated, $atPeriodEnd ? null : $now) + [
+            'consequences' => $this->presentConsequences($org),
+        ]);
+    }
+
+    /**
+     * `SubscriptionController::cancelPreview`: changes nothing.
+     *
+     * @param  array<array-key, mixed>  $payload
+     */
+    private function cancelPreview(string $org, array $payload): FakeResponse
+    {
+        $current = $this->subscriptions[$org] ?? null;
+
+        if ($current === null) {
+            return FakeResponse::error(404, 'This organization has no active subscription.');
+        }
+
+        $mode = $payload['mode'] ?? null;
+        $atPeriodEnd = is_string($mode) ? $mode === 'period_end' : filter_var($payload['at_period_end'] ?? true, FILTER_VALIDATE_BOOL);
+
+        return FakeResponse::json([
+            'subscription' => 'sub_'.$this->billingId($org),
+            'mode' => $atPeriodEnd ? 'period_end' : 'immediate',
+            'ends_at' => $this->date($atPeriodEnd ? $current->periodEnd : new DateTimeImmutable),
+            'consequences' => $this->presentConsequences($org),
+        ]);
+    }
+
+    /**
+     * `BundleController`: the seeded bundles, or none.
+     *
+     * @param  array<array-key, mixed>  $query
+     */
+    private function showBundles(string $org, array $query): FakeResponse
+    {
+        $product = is_string($query['product'] ?? null) ? $query['product'] : null;
+        $locale = is_string($query['locale'] ?? null) ? $query['locale'] : 'en';
+        $bundles = $this->bundles[$org] ?? new OrganizationBundles($this->billingId($org), 'EUR', $locale, organizationRef: $org, product: $product);
+
+        return FakeResponse::json($bundles->toArray());
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function presentConsequences(string $org): array
+    {
+        return array_map(static fn (BundleConsequence $c): array => $c->toArray(), $this->consequences[$org] ?? []);
     }
 
     /**
@@ -620,6 +713,7 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             renewsAt: $end,
             discount: $current->discount,
             organizationRef: $current->organizationRef,
+            bundle: $current->bundle,
         );
 
         $this->subscriptions[$org] = $reactivated;
@@ -891,10 +985,14 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             'period_start' => $this->date($subscription->periodStart),
             'period_end' => $this->date($subscription->periodEnd),
             'renews_at' => $this->date($subscription->renewsAt),
-            'trial_ends_at' => null,
+            'trial_ends_at' => $this->date($subscription->trialEndsAt),
             'canceled_at' => $this->date($canceledAt),
-            'pending_change' => null,
+            'pending_change' => $subscription->pendingChange === null ? null : [
+                'plan' => $subscription->pendingChange->plan,
+                'effective_at' => $this->date($subscription->pendingChange->effectiveAt),
+            ],
             'add_ons' => [],
+            'bundle' => $subscription->bundle?->toArray(),
         ];
     }
 
@@ -918,9 +1016,11 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             'period_start' => $this->date($subscription->periodStart),
             'period_end' => $this->date($subscription->periodEnd),
             'cancel_at_period_end' => $canceledAt === null && $subscription->cancelsAtPeriodEnd(),
-            'trial_ends_at' => null,
+            'trial_ends_at' => $this->date($subscription->trialEndsAt),
             'canceled_at' => $this->date($canceledAt),
             'discount' => $this->presentDiscount($subscription->discount),
+            'reference' => null,
+            'bundle' => $subscription->bundle?->toArray(),
             'updated_at' => $this->date($updatedAt),
         ];
     }
@@ -978,6 +1078,7 @@ class FakeManagementTransport implements ManagementTransport, SubscriptionTransp
             'credit_delta' => ['forfeited' => 0, 'granted' => 0, 'carried' => 0],
             'lines' => $lines,
             'discount' => $this->presentDiscount($current?->discount),
+            'consequences' => $this->presentConsequences($org),
         ];
     }
 

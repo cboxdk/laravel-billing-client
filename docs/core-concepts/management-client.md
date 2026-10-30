@@ -117,6 +117,15 @@ Since 0.4.2 every `Subscription` carries:
 
 An older server leaves these out. They then read as null and false; nothing throws.
 
+## Bundles, trials and scheduled changes
+
+Since 0.4.4 a `Subscription` carries `trialEndsAt`, a scheduled plan change (`pendingChange`, the
+plan key and when) and the cross-product `bundle` benefit on it. A `SubscriptionChange` carries the
+`reference` (a Sites website) and the `bundle` too. `bundles($org)` answers what an app shows about
+bundles and `previewCancel($org)` what a cancel would cost the organization's other
+subscriptions; both live on the `BundleTransport` contract, which the HTTP and fake transports
+implement. See [Show bundles and cancel consequences](../cookbook/show-bundles.md).
+
 ## Reactivate
 
 `reactivate($org)` resumes a paused subscription, undoes a scheduled period-end cancel, or
