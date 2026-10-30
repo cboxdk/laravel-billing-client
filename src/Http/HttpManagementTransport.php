@@ -6,6 +6,7 @@ namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
@@ -18,6 +19,7 @@ use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
+use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\PendingChange;
@@ -50,7 +52,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, ManagementTransport, SubscriptionTransport
+class HttpManagementTransport implements BundleTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -113,6 +115,53 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, S
     public function ensureOrganization(string $org, array $attributes): void
     {
         $this->putDiscardingBody('/api/v1/organizations/'.rawurlencode($org), $attributes);
+    }
+
+    public function upsertOrganization(string $org, array $attributes): OrganizationProfile
+    {
+        $path = '/api/v1/organizations/'.rawurlencode($org);
+
+        try {
+            $response = $this->request()->put($this->url($path), $attributes);
+        } catch (ConnectionException $e) {
+            throw TransportException::unreachable($path, $e);
+        }
+
+        if (! $response->successful()) {
+            throw TransportException::fromResponse($path, $response);
+        }
+
+        $body = $response->json();
+        $raw = is_array($body) ? ($body['organization'] ?? null) : null;
+
+        if (! is_array($raw)) {
+            throw TransportException::malformed($path, 'missing organization object');
+        }
+
+        $text = static fn (string $key): ?string => is_string($raw[$key] ?? null) && $raw[$key] !== '' ? $raw[$key] : null;
+        $validated = $raw['tax_id_validated'] ?? null;
+
+        return new OrganizationProfile(
+            id: $this->stringField($raw, 'id', $path),
+            externalRef: $text('external_ref'),
+            name: $this->stringOr($raw, 'name', ''),
+            billingEmail: $text('billing_email'),
+            addressLine1: $text('billing_address_line1'),
+            addressLine2: $text('billing_address_line2'),
+            postalCode: $text('billing_postal_code'),
+            city: $text('billing_city'),
+            subdivision: $text('billing_subdivision'),
+            country: $text('billing_country'),
+            currency: $text('billing_currency'),
+            locale: $text('locale'),
+            purchaserType: $text('purchaser_type'),
+            eanNumber: $text('ean_number'),
+            orderReference: $text('order_reference'),
+            taxId: $text('tax_id'),
+            taxIdValidated: is_bool($validated) ? $validated : null,
+            taxIdSupported: array_key_exists('tax_id', $raw),
+            shared: ($raw['account'] ?? null) === 'shared',
+        );
     }
 
     public function subscribe(string $org, string $plan): SubscriptionResult

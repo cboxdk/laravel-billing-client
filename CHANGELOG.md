@@ -3,6 +3,19 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## Unreleased
+
+Additive: no existing signature or default changes, and the client still talks to an older server.
+
+### Added
+
+- `BillingManagement::upsertOrganization()`: `ensureOrganization()` with billing's answer, as an
+  `OrganizationProfile` (billing email, address, VAT number and its verdict, and whether the
+  account is shared). A new `OrganizationProfileTransport` contract, so an older custom transport
+  keeps compiling; it gets an `UnsupportedOperation`.
+- `tax_id` on the organization upsert, for a server that takes it.
+- `FakeManagementTransport` presents the address, `tax_id` and `account` on the organization.
+
 ## 0.4.5
 
 A patch release. Everything is additive: no existing signature or default changes, and the
