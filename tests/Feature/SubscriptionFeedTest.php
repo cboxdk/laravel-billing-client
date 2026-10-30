@@ -480,6 +480,8 @@ it('refuses the 0.4.2 calls clearly on a transport written before them', functio
     expect(fn () => $management->reactivate('org_a'))->toThrow(UnsupportedOperation::class, 'reactivate() needs a transport that implements')
         ->and(fn () => $management->subscriptions())->toThrow(UnsupportedOperation::class)
         ->and(fn () => $management->allSubscriptions())->toThrow(UnsupportedOperation::class)
+        ->and(fn () => $management->bundles('org_a'))->toThrow(UnsupportedOperation::class, 'bundles() needs a transport that implements')
+        ->and(fn () => $management->previewCancel('org_a'))->toThrow(UnsupportedOperation::class)
         // The 0.4.1 surface keeps working on it.
         ->and($management->plans())->toBe([]);
 });

@@ -2,10 +2,85 @@
     "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::cancel (at_period_end absent = true)",
     "request": "POST /api/v1/subscriptions/{org}/cancel",
     "status": 200,
-    "body": {"plan": "pro", "organization_ref": "org_a", "status": "active", "paused": false, "pause_reason": null, "seats": 1,
-        "period_start": "2026-10-01T00:00:00+00:00", "period_end": "2026-11-01T00:00:00+00:00",
-        "renews_at": null, "trial_ends_at": null, "canceled_at": null,
-        "pending_change": null, "add_ons": [],
-        "discount": {"code": "SAVE20", "name": "Launch offer", "percent_off": 20, "amount_off_minor": null,
-            "currency": null, "duration": "repeating", "ends_at": "2027-01-01T00:00:00+00:00"}}
+    "body": {
+        "plan": "pro",
+        "organization_ref": "org_a",
+        "status": "active",
+        "paused": false,
+        "pause_reason": null,
+        "seats": 1,
+        "period_start": "2026-10-01T00:00:00+00:00",
+        "period_end": "2026-11-01T00:00:00+00:00",
+        "renews_at": null,
+        "trial_ends_at": null,
+        "canceled_at": null,
+        "pending_change": {
+            "plan": "starter",
+            "effective_at": "2026-11-01T00:00:00+00:00"
+        },
+        "add_ons": [],
+        "discount": {
+            "code": "SAVE20",
+            "name": "Launch offer",
+            "percent_off": 20,
+            "amount_off_minor": null,
+            "currency": null,
+            "duration": "repeating",
+            "ends_at": "2027-01-01T00:00:00+00:00"
+        },
+        "bundle": {
+            "benefit": {
+                "rule": "billing-includes-tax",
+                "kind": "product",
+                "name": "Cbox Billing bundle",
+                "label": "Included with Cbox Billing",
+                "description": "Cbox Tax is included while you pay for a Cbox Billing plan.",
+                "percent_off": 100,
+                "amount_off_minor": null,
+                "currency": "DKK",
+                "price_before_minor": 21900,
+                "price_after_minor": 0,
+                "price_before": "DKK 219,00",
+                "price_after": "DKK 0,00",
+                "text": "100% off",
+                "requires": "cbox-billing"
+            },
+            "ends_at": "2026-11-15T00:00:00+00:00",
+            "next": null,
+            "next_from": "2026-11-15T00:00:00+00:00"
+        },
+        "consequences": [
+            {
+                "subscription": "sub_3b5d7f9h1j3l5n7p9r1t3v5x",
+                "product": "cbox-tax",
+                "product_name": "Cbox Tax",
+                "plan": "tax-starter",
+                "lost": true,
+                "from": "2026-11-15T00:00:00+00:00",
+                "before": {
+                    "rule": "billing-includes-tax",
+                    "kind": "product",
+                    "name": "Cbox Billing bundle",
+                    "label": "Included with Cbox Billing",
+                    "description": "Cbox Tax is included while you pay for a Cbox Billing plan.",
+                    "percent_off": 100,
+                    "amount_off_minor": null,
+                    "currency": "DKK",
+                    "price_before_minor": 21900,
+                    "price_after_minor": 0,
+                    "price_before": "DKK 219,00",
+                    "price_after": "DKK 0,00",
+                    "text": "100% off",
+                    "requires": "cbox-billing"
+                },
+                "after": null,
+                "currency": "DKK",
+                "price_before_minor": 0,
+                "price_after_minor": 21900,
+                "price_before": "DKK 0,00",
+                "price_after": "DKK 219,00",
+                "message": "“Included with Cbox Billing” no longer applies to Cbox Tax from 15 Nov 2026. From then Cbox Tax costs DKK 219.00 per month, excl. VAT."
+            }
+        ]
+    }
 }

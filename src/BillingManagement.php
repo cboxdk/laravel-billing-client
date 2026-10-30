@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client;
 
+use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Exceptions\UnsupportedOperation;
+use Cbox\Billing\Client\ValueObjects\CancelPreview;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
@@ -144,6 +147,33 @@ class BillingManagement
     public function reactivate(string $org): Subscription
     {
         return $this->subscriptionTransport(__FUNCTION__)->reactivate($org);
+    }
+
+    /**
+     * The cross-product bundle benefits on `org`'s subscriptions and the offers to show it
+     * ("Included with your Cbox Billing", "Add Cbox Tax, free with your Billing plan"), with copy
+     * in `$locale` (the customer's own when null), narrowed to `$product` (a product-bound token
+     * is narrowed to its own).
+     *
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see BundleTransport}
+     */
+    public function bundles(string $org, ?string $product = null, ?string $locale = null): OrganizationBundles
+    {
+        return $this->bundleTransport(__FUNCTION__)->bundles($org, $product, $locale);
+    }
+
+    /**
+     * What cancelling `org`'s subscription would do, before the customer confirms: when it ends,
+     * and the bundle benefits the organization's other subscriptions lose (from when, at what new
+     * price). Show {@see CancelPreview::$consequences} before the cancel button. Changes nothing.
+     *
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see BundleTransport}
+     */
+    public function previewCancel(string $org, bool $atPeriodEnd = true, ?string $locale = null): CancelPreview
+    {
+        return $this->bundleTransport(__FUNCTION__)->previewCancel($org, $atPeriodEnd, $locale);
     }
 
     /**
@@ -307,6 +337,15 @@ class BillingManagement
     {
         if (! $this->transport instanceof SubscriptionTransport) {
             throw UnsupportedOperation::missingContract($this->transport, SubscriptionTransport::class, $method);
+        }
+
+        return $this->transport;
+    }
+
+    private function bundleTransport(string $method): BundleTransport
+    {
+        if (! $this->transport instanceof BundleTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, BundleTransport::class, $method);
         }
 
         return $this->transport;

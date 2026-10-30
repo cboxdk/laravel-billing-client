@@ -2,8 +2,21 @@
     "source": "app/Http/Controllers/Api/Management/SubscriptionController.php::reactivate (a period-end cancel undone)",
     "request": "POST /api/v1/subscriptions/{org}/reactivate",
     "status": 200,
-    "body": {"plan": "starter", "organization_ref": "org_r", "status": "active", "paused": false, "pause_reason": null, "seats": 1,
-        "period_start": "2026-10-01T00:00:00+00:00", "period_end": "2026-11-01T00:00:00+00:00",
-        "renews_at": "2026-11-01T00:00:00+00:00", "trial_ends_at": null, "canceled_at": null,
-        "pending_change": null, "add_ons": [], "discount": null}
+    "body": {
+        "plan": "starter",
+        "organization_ref": "org_r",
+        "status": "active",
+        "paused": false,
+        "pause_reason": null,
+        "seats": 1,
+        "period_start": "2026-10-01T00:00:00+00:00",
+        "period_end": "2026-11-01T00:00:00+00:00",
+        "renews_at": "2026-11-01T00:00:00+00:00",
+        "trial_ends_at": null,
+        "canceled_at": null,
+        "pending_change": null,
+        "add_ons": [],
+        "discount": null,
+        "bundle": null
+    }
 }
