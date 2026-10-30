@@ -1184,7 +1184,7 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
      */
     private function taxFor(int $netMinor, ?string $org, ?string $country): ?array
     {
-        $template = ($org !== null ? ($this->taxes[self::taxKey($org, null)] ?? null) : null)
+        $template = ($org !== null ? ($this->taxes[self::taxKey($this->taxOrganization($org), null)] ?? null) : null)
             ?? ($country !== null ? ($this->taxes[self::taxKey(null, $country)] ?? null) : null)
             ?? ($this->taxes[''] ?? null);
 
@@ -1203,6 +1203,15 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, S
         $tax = $template->rate === null || ! is_numeric($template->rate) ? 0 : (int) round($netMinor * (float) $template->rate / 100);
 
         return $template->withAmounts($tax, $netMinor + $tax)->toArray();
+    }
+
+    /**
+     * The organization a tax answer is seeded under for `$org` as this fake keys it. A subclass
+     * that keys subscriptions by something finer (an organization and a website) maps it back.
+     */
+    protected function taxOrganization(string $org): string
+    {
+        return $org;
     }
 
     private static function taxKey(?string $org, ?string $country): string
