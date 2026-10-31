@@ -33,6 +33,7 @@ use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
 use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
+use Cbox\Billing\Client\ValueObjects\SubscriptionTerms;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -624,7 +625,20 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, O
             pendingChange: $this->toPendingChange($raw['pending_change'] ?? null),
             bundle: BundlePayload::subscriptionBundle($raw['bundle'] ?? null, $path),
             recurring: TaxPayload::recurring($raw['recurring'] ?? null),
+            terms: $this->toTerms($raw['terms'] ?? null),
         );
+    }
+
+    /** The plan as the subscription holds it, or null when the server does not say. */
+    private function toTerms(mixed $raw): ?SubscriptionTerms
+    {
+        if (! is_array($raw) || ! is_string($raw['key'] ?? null)) {
+            return null;
+        }
+
+        $version = $raw['version'] ?? null;
+
+        return new SubscriptionTerms($this->toPlan($raw), is_int($version) ? $version : null, ($raw['latest'] ?? true) === true);
     }
 
     /** A scheduled plan change, or null when none is scheduled (or the server predates it). */

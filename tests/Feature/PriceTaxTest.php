@@ -67,6 +67,28 @@ it('reads the tax on each plan and asks for the buyer it names', function (): vo
         ->and($old->grossMinor())->toBeNull();
 });
 
+it('reads what a subscription holds, and nothing from a server that predates it', function (): void {
+    Http::fake([
+        'billing.test/api/v1/subscriptions/org_1' => Http::response(['plan' => 'std', 'status' => 'active', 'terms' => [
+            'key' => 'std', 'name' => 'Standard', 'interval' => 'month', 'version' => 2, 'latest' => false,
+            'entitlements' => ['sites.ai_credits' => ['enabled' => true, 'allowance' => 200, 'weight' => 1.0, 'overage' => 'block']],
+            'features' => ['sites.pages' => 15],
+            'price' => ['minor' => 3_120, 'currency' => 'DKK', 'tax_inclusive' => false],
+        ]]),
+        'billing.test/api/v1/subscriptions/org_2' => Http::response(['plan' => 'std', 'status' => 'active']),
+    ]);
+
+    $transport = taxedHttp();
+    $terms = $transport->subscription('org_1')?->terms;
+
+    expect($terms?->version)->toBe(2)
+        ->and($terms?->latest)->toBeFalse()
+        ->and($terms?->plan->priceMinor)->toBe(3_120)
+        ->and($terms?->plan->entitlement('sites.ai_credits')?->allowance)->toBe(200)
+        ->and($terms?->plan->featureInt('sites.pages'))->toBe(15)
+        ->and($transport->subscription('org_2')?->terms)->toBeNull();
+});
+
 it('reads a subscription recurring price, a change preview tax and an invoice net', function (): void {
     Http::fake([
         'billing.test/api/v1/subscriptions/org_1/preview' => Http::response([

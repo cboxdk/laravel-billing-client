@@ -25,6 +25,9 @@ use DateTimeImmutable;
  * Since 0.4.6 a subscription read (`subscription()`) carries `recurring`: what it costs per
  * period with the tax ({@see RecurringPrice}). Null from an older server, and on the responses
  * that do not price it (subscribe, change, cancel, the change feed).
+ *
+ * Unreleased: a subscription read also carries `terms`: the plan as this subscription holds it
+ * ({@see SubscriptionTerms}). Null from an older server, and on the same responses as `recurring`.
  */
 readonly class Subscription
 {
@@ -42,6 +45,7 @@ readonly class Subscription
         public ?PendingChange $pendingChange = null,
         public ?SubscriptionBundle $bundle = null,
         public ?RecurringPrice $recurring = null,
+        public ?SubscriptionTerms $terms = null,
     ) {}
 
     /** True while the subscription is in a free trial. */

@@ -3,6 +3,16 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## Unreleased
+
+Additive: no existing signature or default changes, and the client still talks to an older server.
+
+### Added
+
+- **What a subscriber holds.** `Subscription` gains an optional trailing `terms`
+  (`SubscriptionTerms`): the plan at the version the subscriber is on, for a change to a plan
+  reaches new customers only and `plans()` shows the latest version. Null from an older server.
+
 ## 0.4.6
 
 A patch release. Everything is additive: no existing signature or default changes, and the
