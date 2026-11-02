@@ -61,6 +61,12 @@ changed. It has `takeDown()` and
 `refuseWith()` too, and `requireProvisionedOrganizations()` to refuse a subscribe for an
 organization you never provisioned.
 
+Manual invoices (0.4.7): `createInvoice()` through the fake numbers invoices `INV-1`, `INV-2`, and
+remembers each `Idempotency-Key`, so replaying a key with the same body returns the same invoice
+and replaying it with a different body is a 409 `idempotency_conflict`, as on the server. Seed an
+invoice `invoice($org, $number)` should read back with `withIssuedInvoice($org, new IssuedInvoice(...))`;
+an unknown number is a 404.
+
 Billing's tax answers are seeded with `withTax()`: a `PriceTax` for nobody in particular, an
 organization (`org:`) or a country (`country:`). The fake resolves the buyer as billing does (the
 organization's answer, else the country's, else nobody's) and works out each amount from the

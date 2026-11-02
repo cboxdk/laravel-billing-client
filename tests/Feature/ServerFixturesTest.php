@@ -19,6 +19,8 @@ use Cbox\Billing\Client\ValueObjects\BundleOfferPlan;
 use Cbox\Billing\Client\ValueObjects\CumulativeUsage;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoiceLine;
 use Cbox\Billing\Client\ValueObjects\MeterActual;
 use Cbox\Billing\Client\ValueObjects\MeterEstimate;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
@@ -213,6 +215,12 @@ function seededManagementFake(): FakeManagementTransport
         ->withSubscription('org_r', new Subscription('starter', 'active', $start, $start->modify('+1 month'), null), $start->modify('+28 days'))
         ->withUsage('org_a', 'api.calls', new MeterUsage(750, 1_000, 0))
         ->withInvoice('org_a', new Invoice('CB-1', $start, 2_500, 'EUR', 'paid'))
+        ->withIssuedInvoice('org_a', new IssuedInvoice(
+            'CB-1', $start, 1_875_000, 'DKK', 'open', 1_500_000, 375_000, 17,
+            [new IssuedInvoiceLine('Consulting', '12.500', 't', 120_000, 1_500_000, 375_000, 1_875_000)],
+            ['title' => 'Specification', 'columns' => [['key' => 'hours', 'label' => 'Hours', 'align' => 'right']], 'rows' => [['1,00']], 'footer' => ['1,00']],
+            ['work_invoice_id' => 'inv_1'], 'https://billing.test/invoices/CB-1/pdf?signature=abc', 'live',
+        ))
         ->withPaymentMethod('org_a', new PaymentMethod('pm_1', 'visa', '4242', 12, 2030, true));
 }
 
@@ -233,6 +241,7 @@ dataset('management endpoints', [
     'reactivate conflict' => ['reactivate-conflict', 'POST', '/api/v1/subscriptions/org_a/reactivate', []],
     'usage' => ['usage-summary', 'GET', '/api/v1/usage/org_a', []],
     'invoices' => ['invoices', 'GET', '/api/v1/invoices/org_a', []],
+    'invoice detail' => ['invoice-detail', 'GET', '/api/v1/invoices/org_a/CB-1', []],
     'checkout' => ['checkout-session', 'POST', '/api/v1/checkout-sessions', ['org' => 'org_a', 'plan' => 'pro', 'return_url' => 'https://app.test']],
     'portal' => ['portal-session', 'POST', '/api/v1/portal-sessions', ['org' => 'org_a', 'return_url' => 'https://app.test']],
     'setup intent' => ['setup-intent', 'POST', '/api/v1/setup-intents', ['org' => 'org_a']],

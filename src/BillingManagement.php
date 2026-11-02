@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -17,6 +18,8 @@ use Cbox\Billing\Client\ValueObjects\CancelPreview;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
+use Cbox\Billing\Client\ValueObjects\NewInvoice;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
@@ -364,6 +367,31 @@ class BillingManagement
     }
 
     /**
+     * Issue a manual invoice to `org` as the console's "new invoice" does (0.4.7). Pass a stable
+     * `$idempotencyKey` (your own record's id): a retry with the same key and body returns the
+     * same invoice instead of issuing a second one. A 422 `billing_address_required` or a 409
+     * `tax_pending` arrives as a {@see BillingRefused} whose `body` carries the server's reason.
+     *
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see InvoiceTransport}
+     */
+    public function createInvoice(string $org, NewInvoice $invoice, string $idempotencyKey): IssuedInvoice
+    {
+        return $this->invoiceTransport(__FUNCTION__)->createInvoice($org, $invoice, $idempotencyKey);
+    }
+
+    /**
+     * One invoice by number with its lines, appendix, metadata and a signed `pdfUrl` (0.4.7).
+     *
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see InvoiceTransport}
+     */
+    public function invoice(string $org, string $number): IssuedInvoice
+    {
+        return $this->invoiceTransport(__FUNCTION__)->invoice($org, $number);
+    }
+
+    /**
      * The transport as a {@see SubscriptionTransport}. A custom {@see ManagementTransport}
      * written against 0.4.1 does not have the 0.4.2 subscription endpoints; that is a clear
      * error, not a silent no-op.
@@ -381,6 +409,15 @@ class BillingManagement
     {
         if (! $this->transport instanceof BundleTransport) {
             throw UnsupportedOperation::missingContract($this->transport, BundleTransport::class, $method);
+        }
+
+        return $this->transport;
+    }
+
+    private function invoiceTransport(string $method): InvoiceTransport
+    {
+        if (! $this->transport instanceof InvoiceTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, InvoiceTransport::class, $method);
         }
 
         return $this->transport;

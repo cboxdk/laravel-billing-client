@@ -3,6 +3,24 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.7 (unreleased)
+
+A patch release. Additive only: no existing signature or default changes.
+
+### Added
+
+- **Manual invoices.** `BillingManagement::createInvoice($org, NewInvoice $invoice, $idempotencyKey)`
+  issues an invoice (`POST /api/v1/invoices/{org}` with an `Idempotency-Key`) and
+  `invoice($org, $number)` reads one back (`GET /api/v1/invoices/{org}/{number}`), both returning an
+  `IssuedInvoice` (an `Invoice` plus `id`, `lines`, `appendix`, `metadata`, signed `pdfUrl` and
+  `environment`, `live` or `sandbox`; `id` is an int). New value objects: `NewInvoice`, `NewInvoiceLine`, `InvoiceAppendix`,
+  `IssuedInvoiceLine`, `IssuedInvoice`.
+- A new `Contracts\InvoiceTransport`, implemented by `HttpManagementTransport` and
+  `FakeManagementTransport`; another transport throws `UnsupportedOperation` (the same pattern as
+  `SubscriptionTransport` and `BundleTransport`).
+- `FakeManagementTransport::withIssuedInvoice()`; the fake numbers invoices `INV-n` and replays an
+  idempotency key to the same invoice.
+
 ## 0.4.6
 
 A patch release. Everything is additive: no existing signature or default changes, and the

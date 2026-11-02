@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -18,7 +19,10 @@ use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoiceLine;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
+use Cbox\Billing\Client\ValueObjects\NewInvoice;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
@@ -53,7 +57,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport
+class HttpManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -405,6 +409,94 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, O
         return $invoices;
     }
 
+    public function createInvoice(string $org, NewInvoice $invoice, string $idempotencyKey): IssuedInvoice
+    {
+        $path = '/api/v1/invoices/'.rawurlencode($org);
+
+        return $this->toIssuedInvoice(
+            $this->postWithHeaders($path, $invoice->toArray(), ['Idempotency-Key' => $idempotencyKey]),
+            $path,
+        );
+    }
+
+    public function invoice(string $org, string $number): IssuedInvoice
+    {
+        $path = '/api/v1/invoices/'.rawurlencode($org).'/'.rawurlencode($number);
+
+        return $this->toIssuedInvoice($this->get($path), $path);
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     */
+    private function toIssuedInvoice(array $body, string $path): IssuedInvoice
+    {
+        $raw = is_array($body['data'] ?? null) ? $body['data'] : $body;
+
+        $lines = [];
+
+        foreach (is_array($raw['lines'] ?? null) ? $raw['lines'] : [] as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            $lines[] = new IssuedInvoiceLine(
+                $this->stringOr($line, 'description', ''),
+                $this->quantity($line['quantity'] ?? null, $path),
+                $this->nullableString($line, 'unit'),
+                $this->intField($line, 'unit_amount_minor', $path),
+                $this->intOr($line, 'net_minor', 0),
+                $this->intOr($line, 'tax_minor', 0),
+                $this->intOr($line, 'amount_minor', 0),
+            );
+        }
+
+        $metadata = [];
+
+        foreach (is_array($raw['metadata'] ?? null) ? $raw['metadata'] : [] as $key => $value) {
+            if (is_string($value)) {
+                $metadata[(string) $key] = $value;
+            }
+        }
+
+        $appendix = null;
+
+        if (is_array($raw['appendix'] ?? null)) {
+            /** @var array<string, mixed> $appendix */
+            $appendix = $raw['appendix'];
+        }
+
+        return new IssuedInvoice(
+            $this->stringField($raw, 'number', $path),
+            $this->date($raw['date'] ?? null),
+            $this->intField($raw, 'amount_minor', $path),
+            $this->stringOr($raw, 'currency', ''),
+            $this->stringOr($raw, 'status', 'open'),
+            TaxPayload::int($raw['subtotal_minor'] ?? null),
+            TaxPayload::int($raw['tax_minor'] ?? null),
+            $this->intField($raw, 'id', $path),
+            $lines,
+            $appendix,
+            $metadata,
+            $this->nullableString($raw, 'pdf_url'),
+            $this->stringOr($raw, 'environment', 'live'),
+        );
+    }
+
+    /** A quantity travels as the decimal string the server validates; a bare number is normalised, never parsed into a float. */
+    private function quantity(mixed $value, string $path): string
+    {
+        if (is_string($value) && is_numeric($value)) {
+            return $value;
+        }
+
+        if (is_int($value)) {
+            return (string) $value;
+        }
+
+        throw TransportException::malformed($path, 'missing decimal field [quantity]');
+    }
+
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
     {
         $path = '/api/v1/checkout-sessions';
@@ -710,6 +802,28 @@ class HttpManagementTransport implements BundleTransport, ManagementTransport, O
     {
         try {
             $response = $this->request()->post($this->url($path), $payload);
+        } catch (ConnectionException $e) {
+            throw TransportException::unreachable($path, $e);
+        }
+
+        if (! $response->successful()) {
+            throw TransportException::fromResponse($path, $response);
+        }
+
+        return $this->decode($response->json(), $path);
+    }
+
+    /**
+     * A POST that carries extra request headers (the `Idempotency-Key` of a create).
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, string>  $headers
+     * @return array<string, mixed>
+     */
+    private function postWithHeaders(string $path, array $payload, array $headers): array
+    {
+        try {
+            $response = $this->request()->withHeaders($headers)->post($this->url($path), $payload);
         } catch (ConnectionException $e) {
             throw TransportException::unreachable($path, $e);
         }

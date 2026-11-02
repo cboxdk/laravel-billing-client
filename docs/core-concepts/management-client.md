@@ -159,6 +159,8 @@ Like the enforcement path, the network lives behind one contract — `Management
 | `subscriptions(?$updatedSince, ?$cursor, ?$limit)` ¹ | `GET /api/v1/subscriptions` |
 | `usage($org)` | `GET /api/v1/usage/{org}` |
 | `invoices($org)` | `GET /api/v1/invoices/{org}` |
+| `createInvoice($org, $invoice, $idempotencyKey)` ² | `POST /api/v1/invoices/{org}` |
+| `invoice($org, $number)` ² | `GET /api/v1/invoices/{org}/{number}` |
 | `createCheckoutSession($org, $plan, $returnUrl, ?$currency)` | `POST /api/v1/checkout-sessions` |
 | `createPortalSession($org, $returnUrl)` | `POST /api/v1/portal-sessions` |
 | `createSetupIntent($org)` | `POST /api/v1/setup-intents` |
@@ -172,10 +174,60 @@ against 0.4.1 still compiles. `HttpManagementTransport` and `FakeManagementTrans
 implement both. Calling one of these through `BillingManagement` on a transport that only
 implements `ManagementTransport` throws `UnsupportedOperation`; nothing is sent.
 
+² Added in 0.4.7 on a separate contract, `InvoiceTransport`, with the same compatibility rule as
+¹: a transport that does not implement it makes `BillingManagement` throw `UnsupportedOperation`.
+
 Every call authenticates with the configured bearer token. The transport is **bound only
 when a base URL and token are configured** — otherwise the host binds its own (e.g. the
 fake in tests), keeping the package deny-by-default rather than pointing at a phantom
 endpoint.
+
+## Create a manual invoice
+
+Since 0.4.7 an app can issue an invoice to one of its organizations, the way the billing console's
+"new invoice" does. The token needs the `invoices:write` scope (`invoices:read` to read one back).
+
+```php
+use Cbox\Billing\Client\Facades\BillingManager;
+use Cbox\Billing\Client\ValueObjects\InvoiceAppendix;
+use Cbox\Billing\Client\ValueObjects\NewInvoice;
+use Cbox\Billing\Client\ValueObjects\NewInvoiceLine;
+
+$issued = BillingManager::createInvoice('org_42', new NewInvoice(
+    lines: [new NewInvoiceLine('Development, October', '12.500', 120_000, unit: 't')],
+    orderReference: 'PO-4471',
+    appendix: new InvoiceAppendix(
+        'Specification',
+        [['key' => 'date', 'label' => 'Date'], ['key' => 'hours', 'label' => 'Hours', 'align' => 'right']],
+        [['20.10.2026', '1,00'], ['21.10.2026', '0,75']],
+        ['I alt', '1,75'],
+    ),
+    metadata: ['work_invoice_id' => 'inv_01J'],
+), idempotencyKey: 'inv_01J');
+
+$issued->number;    // "INV-1001"
+$issued->pdfUrl;    // signed, expires in 15 minutes
+```
+
+- `quantity` is a decimal string with at most three fractional digits; the client sends it as given.
+  `unitAmountMinor` is a positive integer in the account's billing currency.
+- The `$idempotencyKey` is required. Use your own record's id: a retry with the same key and body
+  returns the same invoice, the same key with another body is a 409 `idempotency_conflict`.
+  `IssuedInvoice::$id` is billing's integer id.
+- `metadata` is flat strings: at most 20 keys, each key at most 40 characters matching
+  `[A-Za-z0-9_.-]`, each value at most 200 characters. It is returned on read and in the
+  `invoice.issued` webhook.
+- The appendix has 1 to 8 columns and 1 to 2000 rows; a cell is at most 500 characters, a column
+  label at most 100, the title at most 120, and all text together at most 1,000,000 characters.
+- Refusals are a `BillingRefused`; read `->status` and decode `->body`:
+  - 400 `idempotency_key_required`; 403 `product_bound_token` (the token is bound to one product).
+  - 422 `billing_address_required`, body `{error, message, missing}` with the missing fields.
+  - Any other 422 is Laravel's validation shape, `{message, errors: {path: [...]}}`, with no
+    `error` code: read `errors` for the field paths such as `lines.0.quantity`.
+  - 409 `tax_pending`, `seller_incomplete`, `invoice_refused`, `idempotency_conflict` (same key,
+    another body) and `idempotency_in_flight` (the first request is still running; retry).
+- `invoice($org, $number)` returns the same `IssuedInvoice` later. A sandbox environment answers
+  `environment: "sandbox"` and never reaches a gateway or an accounting system.
 
 ## Discounts, pauses and your organization key
 
