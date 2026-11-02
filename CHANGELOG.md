@@ -3,7 +3,7 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
-## 0.4.7 (unreleased)
+## 0.4.7 — 2026-11-02
 
 A patch release. Additive only: no existing signature or default changes.
 
