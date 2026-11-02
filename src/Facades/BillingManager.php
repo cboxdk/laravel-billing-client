@@ -32,6 +32,8 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Generator<int, \Cbox\Billing\Client\ValueObjects\SubscriptionChange, mixed, void> allSubscriptions(?\DateTimeInterface $updatedSince = null, ?int $pageSize = null)
  * @method static UsageSummary usage(string $org)
  * @method static list<\Cbox\Billing\Client\ValueObjects\Invoice> invoices(string $org)
+ * @method static \Cbox\Billing\Client\ValueObjects\IssuedInvoice createInvoice(string $org, \Cbox\Billing\Client\ValueObjects\NewInvoice $invoice, string $idempotencyKey)
+ * @method static \Cbox\Billing\Client\ValueObjects\IssuedInvoice invoice(string $org, string $number)
  * @method static CheckoutSession createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null)
  * @method static PortalSession createPortalSession(string $org, string $returnUrl)
  * @method static SetupIntent createSetupIntent(string $org)

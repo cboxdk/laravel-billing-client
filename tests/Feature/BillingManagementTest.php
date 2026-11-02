@@ -3,13 +3,27 @@
 declare(strict_types=1);
 
 use Cbox\Billing\Client\BillingManagement;
+use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\TransportException;
+use Cbox\Billing\Client\Exceptions\UnsupportedOperation;
 use Cbox\Billing\Client\Testing\FakeManagementTransport;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
+use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoiceLine;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
+use Cbox\Billing\Client\ValueObjects\NewInvoice;
+use Cbox\Billing\Client\ValueObjects\NewInvoiceLine;
+use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\Plan;
+use Cbox\Billing\Client\ValueObjects\PortalSession;
+use Cbox\Billing\Client\ValueObjects\SetupIntent;
+use Cbox\Billing\Client\ValueObjects\Subscription;
+use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
+use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -234,4 +248,120 @@ it('cancels immediately only when asked to', function (): void {
     (new BillingManagement(makeHttpManagement()))->cancel('org_a', atPeriodEnd: false);
 
     Http::assertSent(fn ($request): bool => $request['at_period_end'] === false);
+});
+
+it('replays a create through the fake to the same invoice number', function (): void {
+    $management = $this->makeBillingManagement();
+    $invoice = new NewInvoice([new NewInvoiceLine('Consulting', '12.500', 120000, 't')], metadata: ['work_invoice_id' => 'inv_1']);
+
+    $first = $management->createInvoice('org_a', $invoice, 'inv_1');
+    $replay = $management->createInvoice('org_a', $invoice, 'inv_1');
+    $other = $management->createInvoice('org_a', $invoice, 'inv_2');
+
+    expect($first->number)->toBe('INV-1')
+        ->and($replay->number)->toBe('INV-1')
+        ->and($other->number)->toBe('INV-2')
+        ->and($first->lines[0]->quantity)->toBe('12.500')
+        ->and($first->metadata)->toBe(['work_invoice_id' => 'inv_1'])
+        ->and($management->invoice('org_a', 'INV-2')->id)->toBe($other->id);
+});
+
+it('refuses a replayed key with a different body, as the server does', function (): void {
+    $management = $this->makeBillingManagement();
+    $management->createInvoice('org_a', new NewInvoice([new NewInvoiceLine('A', '1', 100)]), 'k');
+
+    expect(fn () => $management->createInvoice('org_a', new NewInvoice([new NewInvoiceLine('B', '1', 100)]), 'k'))
+        ->toThrow(BillingRefused::class);
+});
+
+it('serves a seeded issued invoice and 404s an unknown number', function (): void {
+    $this->managementTransport()->withIssuedInvoice('org_a', new IssuedInvoice(
+        'INV-9', null, 12500, 'DKK', 'open', 10000, 2500, 'id_9',
+        [new IssuedInvoiceLine('Work', '1.000', null, 10000, 10000, 2500, 12500)], null, [], null, 'production',
+    ));
+    $management = $this->makeBillingManagement();
+
+    expect($management->invoice('org_a', 'INV-9')->lines[0]->description)->toBe('Work')
+        ->and(fn () => $management->invoice('org_a', 'INV-404'))->toThrow(BillingRefused::class);
+});
+
+it('refuses createInvoice on a transport without the contract', function (): void {
+    $transport = new class implements ManagementTransport
+    {
+        public function plans(?string $currency = null): array
+        {
+            return [];
+        }
+
+        public function ensureOrganization(string $org, array $attributes): void {}
+
+        public function subscription(string $org): ?Subscription
+        {
+            return null;
+        }
+
+        public function subscribe(string $org, string $plan): SubscriptionResult
+        {
+            throw new LogicException;
+        }
+
+        public function previewChange(string $org, string $plan): ChangePreview
+        {
+            throw new LogicException;
+        }
+
+        public function changePlan(string $org, string $plan): ChangePreview
+        {
+            throw new LogicException;
+        }
+
+        public function cancel(string $org, bool $atPeriodEnd): Subscription
+        {
+            throw new LogicException;
+        }
+
+        public function usage(string $org): UsageSummary
+        {
+            throw new LogicException;
+        }
+
+        public function invoices(string $org): array
+        {
+            return [];
+        }
+
+        public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+        {
+            throw new LogicException;
+        }
+
+        public function createPortalSession(string $org, string $returnUrl): PortalSession
+        {
+            throw new LogicException;
+        }
+
+        public function createSetupIntent(string $org): SetupIntent
+        {
+            throw new LogicException;
+        }
+
+        public function createPaymentIntent(string $org, ?string $reference = null, ?int $amountMinor = null, ?string $currency = null): PaymentIntent
+        {
+            throw new LogicException;
+        }
+
+        public function paymentMethods(string $org): array
+        {
+            return [];
+        }
+
+        public function setDefaultPaymentMethod(string $org, string $id): void {}
+
+        public function removePaymentMethod(string $org, string $id): void {}
+    };
+    $management = new BillingManagement($transport);
+
+    expect(fn () => $management->createInvoice('org_a', new NewInvoice([new NewInvoiceLine('x', '1', 100)]), 'k'))
+        ->toThrow(UnsupportedOperation::class, 'createInvoice() needs a transport that implements')
+        ->and(fn () => $management->invoice('org_a', 'INV-1'))->toThrow(UnsupportedOperation::class);
 });

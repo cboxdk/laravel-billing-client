@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -20,7 +21,10 @@ use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
+use Cbox\Billing\Client\ValueObjects\IssuedInvoiceLine;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
+use Cbox\Billing\Client\ValueObjects\NewInvoice;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
@@ -81,7 +85,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport
+class FakeManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport
 {
     private const string BASE_URL = 'https://billing.fake';
 
@@ -117,6 +121,16 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, O
 
     /** @var array<string, list<Invoice>> */
     private array $invoices = [];
+
+    /** @var array<string, list<IssuedInvoice>> */
+    private array $issued = [];
+
+    /** @var array<string, array{hash: string, invoice: IssuedInvoice}> */
+    private array $idempotency = [];
+
+    private int $invoiceSeq = 0;
+
+    private ?string $idempotencyKey = null;
 
     /** @var array<string, list<PaymentMethod>> */
     private array $paymentMethods = [];
@@ -226,6 +240,16 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, O
     public function withInvoice(string $org, Invoice $invoice): self
     {
         $this->invoices[$org][] = $invoice;
+
+        return $this;
+    }
+
+    /**
+     * Seed an invoice `invoice($org, $number)` can read back (0.4.7).
+     */
+    public function withIssuedInvoice(string $org, IssuedInvoice $invoice): self
+    {
+        $this->issued[$org][] = $invoice;
 
         return $this;
     }
@@ -370,6 +394,16 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, O
         return $this->wire()->invoices($org);
     }
 
+    public function createInvoice(string $org, NewInvoice $invoice, string $idempotencyKey): IssuedInvoice
+    {
+        return $this->wire()->createInvoice($org, $invoice, $idempotencyKey);
+    }
+
+    public function invoice(string $org, string $number): IssuedInvoice
+    {
+        return $this->wire()->invoice($org, $number);
+    }
+
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
     {
         return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency);
@@ -441,6 +475,8 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, O
             $method === 'GET' && $count === 3 && $resource === 'organizations' && $action === 'bundles' => $this->showBundles($segments[1], $query),
             $method === 'GET' && $count === 2 && $resource === 'usage' => $this->usageSummary($segments[1]),
             $method === 'GET' && $count === 2 && $resource === 'invoices' => $this->listInvoices($segments[1]),
+            $method === 'POST' && $count === 2 && $resource === 'invoices' => $this->storeInvoice($segments[1], $payload),
+            $method === 'GET' && $count === 3 && $resource === 'invoices' => $this->showInvoice($segments[1], $segments[2]),
             $method === 'POST' && $segments === ['checkout-sessions'] => $this->checkoutSession($payload),
             $method === 'POST' && $segments === ['portal-sessions'] => $this->portalSession($payload),
             $method === 'POST' && $segments === ['setup-intents'] => $this->setupIntent($payload),
@@ -469,6 +505,8 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, O
             }
 
             parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+            $idempotency = $request->header('Idempotency-Key');
+            $this->idempotencyKey = is_string($idempotency[0] ?? null) ? $idempotency[0] : null;
 
             return $this->respond(
                 $request->method(),
@@ -910,6 +948,112 @@ class FakeManagementTransport implements BundleTransport, ManagementTransport, O
             ],
             $this->invoices[$org] ?? [],
         )));
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $payload
+     */
+    private function storeInvoice(string $org, array $payload): FakeResponse
+    {
+        if ($this->idempotencyKey === null || $this->idempotencyKey === '') {
+            return FakeResponse::json(['error' => 'idempotency_key_required', 'message' => 'The Idempotency-Key header is required.'], 400);
+        }
+
+        $rawLines = is_array($payload['lines'] ?? null) ? array_values($payload['lines']) : [];
+
+        if ($rawLines === []) {
+            return FakeResponse::json(['error' => 'validation_failed', 'message' => 'At least one line is required.', 'errors' => ['lines' => ['required']]], 422);
+        }
+
+        $key = $org.'|'.$this->idempotencyKey;
+        $hash = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+
+        if (isset($this->idempotency[$key])) {
+            return $this->idempotency[$key]['hash'] === $hash
+                ? FakeResponse::json($this->presentIssuedInvoice($this->idempotency[$key]['invoice']), 201)
+                : FakeResponse::json(['error' => 'idempotency_conflict', 'message' => 'This Idempotency-Key was used with a different body.'], 409);
+        }
+
+        $lines = [];
+        $net = 0;
+
+        foreach ($rawLines as $raw) {
+            $line = is_array($raw) ? $raw : [];
+            $quantity = $this->string($line, 'quantity');
+            $unitAmount = is_int($line['unit_amount_minor'] ?? null) ? $line['unit_amount_minor'] : 0;
+            $lineNet = (int) round((float) $quantity * $unitAmount);
+            $net += $lineNet;
+            $unit = $this->string($line, 'unit');
+            $lines[] = new IssuedInvoiceLine($this->string($line, 'description'), $quantity, $unit === '' ? null : $unit, $unitAmount, $lineNet, 0, $lineNet);
+        }
+
+        $number = 'INV-'.(++$this->invoiceSeq);
+        /** @var array<string, string> $metadata */
+        $metadata = is_array($payload['metadata'] ?? null) ? array_filter($payload['metadata'], is_string(...)) : [];
+        /** @var array<string, mixed>|null $appendix */
+        $appendix = is_array($payload['appendix'] ?? null) ? $payload['appendix'] : null;
+
+        $invoice = new IssuedInvoice(
+            $number,
+            new DateTimeImmutable('now'),
+            $net,
+            'DKK',
+            'open',
+            $net,
+            0,
+            'inv_fake_'.$this->invoiceSeq,
+            $lines,
+            $appendix,
+            $metadata,
+            self::BASE_URL.'/invoices/'.$number.'/pdf?signature=fake',
+            'sandbox',
+        );
+
+        $this->idempotency[$key] = ['hash' => $hash, 'invoice' => $invoice];
+        $this->issued[$org][] = $invoice;
+
+        return FakeResponse::json($this->presentIssuedInvoice($invoice), 201);
+    }
+
+    private function showInvoice(string $org, string $number): FakeResponse
+    {
+        foreach ($this->issued[$org] ?? [] as $invoice) {
+            if ($invoice->number === $number) {
+                return FakeResponse::json($this->presentIssuedInvoice($invoice));
+            }
+        }
+
+        return FakeResponse::error(404, 'Invoice not found.');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function presentIssuedInvoice(IssuedInvoice $invoice): array
+    {
+        return [
+            'id' => $invoice->id,
+            'number' => $invoice->number,
+            'date' => $this->date($invoice->date),
+            'amount_minor' => $invoice->amountMinor,
+            'subtotal_minor' => $invoice->subtotalMinor ?? $invoice->amountMinor,
+            'tax_minor' => $invoice->taxMinor ?? 0,
+            'currency' => $invoice->currency,
+            'status' => $invoice->status,
+            'environment' => $invoice->environment,
+            'lines' => array_map(static fn (IssuedInvoiceLine $line): array => [
+                'description' => $line->description,
+                'quantity' => $line->quantity,
+                'unit' => $line->unit,
+                'unit_amount_minor' => $line->unitAmountMinor,
+                'net_minor' => $line->netMinor,
+                'tax_minor' => $line->taxMinor,
+                'amount_minor' => $line->amountMinor,
+            ], $invoice->lines),
+            'appendix' => $invoice->appendix,
+            'metadata' => $invoice->metadata,
+            'pdf_url' => $invoice->pdfUrl,
+        ];
     }
 
     /**
