@@ -194,7 +194,7 @@ use Cbox\Billing\Client\ValueObjects\NewInvoice;
 use Cbox\Billing\Client\ValueObjects\NewInvoiceLine;
 
 $issued = BillingManager::createInvoice('org_42', new NewInvoice(
-    lines: [new NewInvoiceLine('Development, October', '12.500', 120_000, unit: 't', category: 'services.consulting')],
+    lines: [new NewInvoiceLine('Development, October', '12.500', 120_000, unit: 't')],
     orderReference: 'PO-4471',
     appendix: new InvoiceAppendix(
         'Specification',
@@ -213,10 +213,19 @@ $issued->pdfUrl;    // signed, expires in 15 minutes
   `unitAmountMinor` is a positive integer in the account's billing currency.
 - The `$idempotencyKey` is required. Use your own record's id: a retry with the same key and body
   returns the same invoice, the same key with another body is a 409 `idempotency_conflict`.
-- `metadata` (flat strings, up to 20 keys) is returned on read and in the `invoice.issued` webhook.
-- Refusals are a `BillingRefused`; read `->status` and decode `->body` for the code: 422
-  `billing_address_required` (with the missing fields), 422 `validation_failed`, 409 `tax_pending`,
-  409 `seller_incomplete`, 409 `idempotency_conflict`.
+  `IssuedInvoice::$id` is billing's integer id.
+- `metadata` is flat strings: at most 20 keys, each key at most 40 characters matching
+  `[A-Za-z0-9_.-]`, each value at most 200 characters. It is returned on read and in the
+  `invoice.issued` webhook.
+- The appendix has 1 to 8 columns and 1 to 2000 rows; a cell is at most 500 characters, a column
+  label at most 100, the title at most 120, and all text together at most 1,000,000 characters.
+- Refusals are a `BillingRefused`; read `->status` and decode `->body`:
+  - 400 `idempotency_key_required`; 403 `product_bound_token` (the token is bound to one product).
+  - 422 `billing_address_required`, body `{error, message, missing}` with the missing fields.
+  - Any other 422 is Laravel's validation shape, `{message, errors: {path: [...]}}`, with no
+    `error` code: read `errors` for the field paths such as `lines.0.quantity`.
+  - 409 `tax_pending`, `seller_incomplete`, `invoice_refused`, `idempotency_conflict` (same key,
+    another body) and `idempotency_in_flight` (the first request is still running; retry).
 - `invoice($org, $number)` returns the same `IssuedInvoice` later. A sandbox environment answers
   `environment: "sandbox"` and never reaches a gateway or an accounting system.
 

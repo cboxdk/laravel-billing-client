@@ -13,7 +13,7 @@ A patch release. Additive only: no existing signature or default changes.
   issues an invoice (`POST /api/v1/invoices/{org}` with an `Idempotency-Key`) and
   `invoice($org, $number)` reads one back (`GET /api/v1/invoices/{org}/{number}`), both returning an
   `IssuedInvoice` (an `Invoice` plus `id`, `lines`, `appendix`, `metadata`, signed `pdfUrl` and
-  `environment`). New value objects: `NewInvoice`, `NewInvoiceLine`, `InvoiceAppendix`,
+  `environment`, `live` or `sandbox`; `id` is an int). New value objects: `NewInvoice`, `NewInvoiceLine`, `InvoiceAppendix`,
   `IssuedInvoiceLine`, `IssuedInvoice`.
 - A new `Contracts\InvoiceTransport`, implemented by `HttpManagementTransport` and
   `FakeManagementTransport`; another transport throws `UnsupportedOperation` (the same pattern as

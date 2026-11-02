@@ -474,12 +474,12 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
             $this->stringOr($raw, 'status', 'open'),
             TaxPayload::int($raw['subtotal_minor'] ?? null),
             TaxPayload::int($raw['tax_minor'] ?? null),
-            $this->stringField($raw, 'id', $path),
+            $this->intField($raw, 'id', $path),
             $lines,
             $appendix,
             $metadata,
             $this->nullableString($raw, 'pdf_url'),
-            $this->stringOr($raw, 'environment', 'production'),
+            $this->stringOr($raw, 'environment', 'live'),
         );
     }
 

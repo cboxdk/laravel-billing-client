@@ -1,17 +1,24 @@
 {
-    "source": "app/Http/Controllers/Api/Management/InvoiceController.php::store / ::show (manual invoices, Change 1)",
+    "source": "app/Http/Controllers/Api/Management/InvoiceController.php::store / ::show via Concerns/PresentsInvoices::invoice() (manual invoices, Change 1)",
     "request": "GET /api/v1/invoices/{org}/{number} (POST /api/v1/invoices/{org} answers the same body with 201)",
     "status": 200,
     "body": {
-        "id": "01JC2K8M4N6P8R0T2V4X6Z8B1D",
+        "id": 17,
         "number": "INV-1001",
         "date": "2026-11-02T00:00:00+00:00",
         "amount_minor": 1875000,
+        "credit_applied_minor": 0,
+        "amount_due_minor": 1875000,
         "subtotal_minor": 1500000,
         "tax_minor": 375000,
         "currency": "DKK",
         "status": "open",
-        "environment": "production",
+        "collection_method": "invoice",
+        "payment_terms_days": 14,
+        "due_at": "2026-11-16T00:00:00+00:00",
+        "paid_minor": 0,
+        "remaining_minor": 1875000,
+        "has_appendix": true,
         "lines": [
             {
                 "description": "Consulting",
@@ -25,11 +32,26 @@
         ],
         "appendix": {
             "title": "Specification",
-            "columns": [{"key": "hours", "label": "Hours", "align": "right"}],
-            "rows": [["1,00"]],
-            "footer": ["1,00"]
+            "columns": [
+                {
+                    "key": "hours",
+                    "label": "Hours",
+                    "align": "right"
+                }
+            ],
+            "rows": [
+                [
+                    "1,00"
+                ]
+            ],
+            "footer": [
+                "1,00"
+            ]
         },
-        "metadata": {"work_invoice_id": "inv_1"},
-        "pdf_url": "https://billing.test/invoices/INV-1001/pdf?signature=abc"
+        "metadata": {
+            "work_invoice_id": "inv_1"
+        },
+        "pdf_url": "https://billing.test/invoices/INV-1001/pdf?signature=abc",
+        "environment": "live"
     }
 }

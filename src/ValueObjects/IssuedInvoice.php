@@ -8,9 +8,9 @@ use DateTimeImmutable;
 
 /**
  * An invoice in full, from `createInvoice()` or `invoice()`: everything an {@see Invoice} carries
- * plus billing's `id`, the `lines`, the `appendix` (the array you sent, null when none), your
+ * plus billing's integer `id`, the `lines`, the `appendix` (the array you sent, null when none), your
  * `metadata`, a signed, time-limited `pdfUrl` and the `environment` it was issued in
- * (`production` or `sandbox`).
+ * (`live` or `sandbox`).
  */
 readonly class IssuedInvoice extends Invoice
 {
@@ -27,7 +27,7 @@ readonly class IssuedInvoice extends Invoice
         string $status,
         ?int $subtotalMinor,
         ?int $taxMinor,
-        public string $id,
+        public int $id,
         public array $lines,
         public ?array $appendix,
         public array $metadata,

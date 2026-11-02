@@ -33,11 +33,11 @@ it('creates a manual invoice with the idempotency key and maps the detail', func
 
     expect($issued)->toBeInstanceOf(IssuedInvoice::class)
         ->and($issued->number)->toBe('INV-1001')
-        ->and($issued->id)->toBe('01JC2K8M4N6P8R0T2V4X6Z8B1D')
+        ->and($issued->id)->toBe(17)
         ->and($issued->amountMinor)->toBe(1875000)
         ->and($issued->subtotalMinor)->toBe(1500000)
         ->and($issued->taxMinor)->toBe(375000)
-        ->and($issued->environment)->toBe('production')
+        ->and($issued->environment)->toBe('live')
         ->and($issued->lines)->toHaveCount(1)
         ->and($issued->lines[0]->quantity)->toBe('12.500')
         ->and($issued->lines[0]->unit)->toBe('t')

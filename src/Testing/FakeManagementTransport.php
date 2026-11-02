@@ -962,7 +962,7 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
         $rawLines = is_array($payload['lines'] ?? null) ? array_values($payload['lines']) : [];
 
         if ($rawLines === []) {
-            return FakeResponse::json(['error' => 'validation_failed', 'message' => 'At least one line is required.', 'errors' => ['lines' => ['required']]], 422);
+            return FakeResponse::json(['message' => 'The lines field is required.', 'errors' => ['lines' => ['The lines field is required.']]], 422);
         }
 
         $key = $org.'|'.$this->idempotencyKey;
@@ -1001,7 +1001,7 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
             'open',
             $net,
             0,
-            'inv_fake_'.$this->invoiceSeq,
+            $this->invoiceSeq,
             $lines,
             $appendix,
             $metadata,
@@ -1036,10 +1036,18 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
             'number' => $invoice->number,
             'date' => $this->date($invoice->date),
             'amount_minor' => $invoice->amountMinor,
+            'credit_applied_minor' => 0,
+            'amount_due_minor' => $invoice->amountMinor,
             'subtotal_minor' => $invoice->subtotalMinor ?? $invoice->amountMinor,
             'tax_minor' => $invoice->taxMinor ?? 0,
             'currency' => $invoice->currency,
             'status' => $invoice->status,
+            'collection_method' => 'invoice',
+            'payment_terms_days' => 14,
+            'due_at' => $invoice->date === null ? null : $invoice->date->modify('+14 days')->format(DATE_ATOM),
+            'paid_minor' => 0,
+            'remaining_minor' => $invoice->amountMinor,
+            'has_appendix' => $invoice->appendix !== null,
             'environment' => $invoice->environment,
             'lines' => array_map(static fn (IssuedInvoiceLine $line): array => [
                 'description' => $line->description,

@@ -29,7 +29,7 @@ interface InvoiceTransport
      * "new invoice" does. The `$idempotencyKey` travels as the `Idempotency-Key` header: the same
      * key with the same body returns the same invoice, with a different body it is a 409.
      *
-     * @throws TransportException a BillingRefused when billing says no (422 `billing_address_required` or `validation_failed`, 409 `tax_pending`, `seller_incomplete` or `idempotency_conflict`), a BillingUnavailable when it cannot answer
+     * @throws TransportException a BillingRefused when billing says no (400 `idempotency_key_required`, 403 `product_bound_token`, 422 `billing_address_required` with `{error, message, missing}` or a Laravel validation failure with `{message, errors: {path: [...]}}` and no `error` code, 409 `tax_pending`, `seller_incomplete`, `invoice_refused`, `idempotency_conflict` or `idempotency_in_flight`), a BillingUnavailable when it cannot answer
      */
     public function createInvoice(string $org, NewInvoice $invoice, string $idempotencyKey): IssuedInvoice;
 
