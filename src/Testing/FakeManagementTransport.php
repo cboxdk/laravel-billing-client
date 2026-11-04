@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
@@ -91,7 +92,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     /** @var array<string, true> */
     private array $oneOffProducts = [];
@@ -381,6 +382,26 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
     public function subscription(string $org): ?Subscription
     {
         return $this->wire()->subscription($org);
+    }
+
+    public function subscribeIdempotently(string $org, string $plan, string $idempotencyKey): SubscriptionResult
+    {
+        return $this->wire()->subscribeIdempotently($org, $plan, $idempotencyKey);
+    }
+
+    public function changePlanIdempotently(string $org, string $plan, string $idempotencyKey): ChangePreview
+    {
+        return $this->wire()->changePlanIdempotently($org, $plan, $idempotencyKey);
+    }
+
+    public function cancelIdempotently(string $org, bool $atPeriodEnd, string $idempotencyKey): Subscription
+    {
+        return $this->wire()->cancelIdempotently($org, $atPeriodEnd, $idempotencyKey);
+    }
+
+    public function reactivateIdempotently(string $org, string $idempotencyKey): Subscription
+    {
+        return $this->wire()->reactivateIdempotently($org, $idempotencyKey);
     }
 
     public function subscribe(string $org, string $plan): SubscriptionResult
