@@ -30,6 +30,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static Subscription reactivate(string $org)
  * @method static SubscriptionPage subscriptions(?\DateTimeInterface $updatedSince = null, ?string $cursor = null, ?int $limit = null)
  * @method static \Generator<int, \Cbox\Billing\Client\ValueObjects\SubscriptionChange, mixed, void> allSubscriptions(?\DateTimeInterface $updatedSince = null, ?int $pageSize = null)
+ * @method static \Cbox\Billing\Client\ValueObjects\UsageEventReceipt ingestUsageEvents(string $org, list<\Cbox\Billing\Client\ValueObjects\UsageEvent> $events)
  * @method static UsageSummary usage(string $org)
  * @method static list<\Cbox\Billing\Client\ValueObjects\Invoice> invoices(string $org)
  * @method static \Cbox\Billing\Client\ValueObjects\IssuedInvoice createInvoice(string $org, \Cbox\Billing\Client\ValueObjects\NewInvoice $invoice, string $idempotencyKey)

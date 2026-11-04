@@ -10,6 +10,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
+use Cbox\Billing\Client\Contracts\UsageEventTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -37,6 +38,8 @@ use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
 use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
+use Cbox\Billing\Client\ValueObjects\UsageEvent;
+use Cbox\Billing\Client\ValueObjects\UsageEventReceipt;
 use Cbox\Billing\Client\ValueObjects\UsageGroup;
 use Cbox\Billing\Client\ValueObjects\UsagePrice;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
@@ -59,7 +62,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport
+class HttpManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -350,6 +353,16 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
         }
 
         return BundlePayload::cancelPreview($this->post($path, $payload), $path);
+    }
+
+    /** @param list<UsageEvent> $events */
+    public function ingestUsageEvents(string $org, array $events): UsageEventReceipt
+    {
+        UsageEvent::validateBatch($org, $events);
+        $body = $this->post('/api/v1/events', ['org' => $org,
+            'events' => array_map(static fn (UsageEvent $event): array => $event->toArray(), $events)]);
+
+        return UsageEventReceipt::fromResponse($body, $events);
     }
 
     public function usage(string $org): UsageSummary

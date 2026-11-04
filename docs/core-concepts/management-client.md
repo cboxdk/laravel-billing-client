@@ -380,3 +380,37 @@ This is the current-period usage summary, not a historical event export or a
 per-project monetary quote. Amounts and tax must still come from Billing. Sending
 raw dimensioned usage events is a separate integration contract; reading these
 rows does not activate event collection or billing.
+
+### Raw usage events
+
+`BillingManagement::ingestUsageEvents($org, $events)` sends 1–1,000 `UsageEvent`
+objects through `POST /api/v1/events`. The optional `UsageEventTransport` contract
+keeps existing custom transports compatible; a transport without it raises
+`UnsupportedOperation`.
+
+Persist the event ID, occurrence time, meter, integer quantity, service, dimensions
+and optional series key before sending. Retry the same payload and ID. An event
+supports ten string dimensions; keys use lowercase letters, digits and underscores.
+A zero quantity is retained, including a terminating level for a time-weighted meter.
+Never report the same consumption through both raw events and cumulative usage.
+
+The returned `UsageEventReceipt` contains accepted and duplicate **counts**, plus
+rejections with their batch index, event ID and reason. Rejections must be recorded
+individually. The client verifies that every submitted event is accounted for and
+that each rejection matches the submitted ID and index. A malformed receipt raises
+`BillingUnavailable`: it does not establish delivery, even if the server may have
+stored the events. Keep the batch pending for reconciliation or an identical retry.
+The API does not say which individual non-rejected events were new or duplicates;
+do not invent that distinction in an audit log.
+
+An HTTP refusal remains `BillingRefused`; connection errors, throttling and server
+errors remain `BillingUnavailable`. This method does not automatically retry, persist
+an outbox, authorize a meter, or turn telemetry into chargeable usage. The consuming
+application owns durable delivery and reconciliation. Billing's event dating and
+ID-retention windows still apply; an indefinite replay guarantee is not provided.
+
+For tests, seed `FakeManagementTransport::withUsageEventMeter($meter)` and inspect
+`recordedUsageEvents($org)`. Unknown meters are rejected; an optional second argument
+seeds another rejection reason. Replays deduplicate within that fake instance and
+organization. The fake exercises the real HTTP response parser but does not simulate
+retention expiry, time-window aggregation, invoice pricing or agreement eligibility.

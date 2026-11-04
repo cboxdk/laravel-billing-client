@@ -7,6 +7,9 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ### Added
 
+- Raw event submission through `UsageEventTransport`, with stable event DTOs, validated
+  partial-delivery receipts and replay support in the shared fake. The caller owns
+  persistence and retries; malformed acknowledgements never establish delivery.
 - `MeterUsage::breakdown` preserves Billing's grouped quantities and dimension
   values as `UsageGroup` rows, including unknown dimension values. Older servers
   yield null instead of fabricated empty usage; malformed groups fail the read.

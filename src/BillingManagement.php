@@ -10,6 +10,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
+use Cbox\Billing\Client\Contracts\UsageEventTransport;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -31,6 +32,8 @@ use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
 use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
+use Cbox\Billing\Client\ValueObjects\UsageEvent;
+use Cbox\Billing\Client\ValueObjects\UsageEventReceipt;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeInterface;
 use Generator;
@@ -270,6 +273,16 @@ class BillingManagement
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
+    /** @param list<UsageEvent> $events */
+    public function ingestUsageEvents(string $org, array $events): UsageEventReceipt
+    {
+        if (! $this->transport instanceof UsageEventTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, UsageEventTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->ingestUsageEvents($org, $events);
+    }
+
     public function usage(string $org): UsageSummary
     {
         return $this->transport->usage($org);

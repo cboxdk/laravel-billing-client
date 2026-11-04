@@ -10,6 +10,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
+use Cbox\Billing\Client\Contracts\UsageEventTransport;
 use Cbox\Billing\Client\Enums\TaxBasis;
 use Cbox\Billing\Client\Enums\TaxStatus;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
@@ -37,6 +38,8 @@ use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
 use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
+use Cbox\Billing\Client\ValueObjects\UsageEvent;
+use Cbox\Billing\Client\ValueObjects\UsageEventReceipt;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -85,8 +88,28 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport
+class FakeManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
+    /** @var array<string, string|null> Seeded event meters and an optional rejection reason. */
+    private array $eventMeters = [];
+
+    /** @var array<string, array<string, array<string, mixed>>> */
+    private array $usageEvents = [];
+
+    /** The fake models acknowledgement and replay, not pricing or time-window aggregation. */
+    public function withUsageEventMeter(string $meter, ?string $rejection = null): static
+    {
+        $this->eventMeters[$meter] = $rejection;
+
+        return $this;
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function recordedUsageEvents(string $org): array
+    {
+        return array_values($this->usageEvents[$org] ?? []);
+    }
+
     private const string BASE_URL = 'https://billing.fake';
 
     /**
@@ -384,6 +407,12 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
         return $this->wire()->previewCancel($org, $atPeriodEnd, $locale);
     }
 
+    /** @param list<UsageEvent> $events */
+    public function ingestUsageEvents(string $org, array $events): UsageEventReceipt
+    {
+        return $this->wire()->ingestUsageEvents($org, $events);
+    }
+
     public function usage(string $org): UsageSummary
     {
         return $this->wire()->usage($org);
@@ -462,6 +491,7 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
         $action = $segments[2] ?? null;
 
         return match (true) {
+            $method === 'POST' && $segments === ['events'] => $this->storeUsageEvents($payload),
             $method === 'GET' && $segments === ['plans'] => $this->listPlans($query),
             $method === 'GET' && $segments === ['subscriptions'] => $this->listSubscriptionChanges($query),
             $method === 'PUT' && $count === 2 && $resource === 'organizations' => $this->storeOrganization($segments[1], $payload),
@@ -907,6 +937,50 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
             'canceledAt' => $canceledAt,
             'updatedAt' => $at === null ? new DateTimeImmutable : DateTimeImmutable::createFromInterface($at),
         ];
+    }
+
+    /** @param array<array-key, mixed> $payload */
+    private function storeUsageEvents(array $payload): FakeResponse
+    {
+        $org = $payload['org'] ?? null;
+        $events = $payload['events'] ?? null;
+        if (! is_string($org) || $org === '' || ! is_array($events) || ! array_is_list($events)
+            || count($events) < 1 || count($events) > 1000) {
+            return FakeResponse::validation('events', 'An organization and 1 to 1000 events are required.');
+        }
+        $records = [];
+        foreach ($events as $event) {
+            if (! is_array($event)) {
+                return FakeResponse::validation('events', 'Malformed event.');
+            }
+            $record = [];
+            foreach ($event as $key => $value) {
+                if (! is_string($key)) {
+                    return FakeResponse::validation('events', 'Event fields must be named.');
+                }
+                $record[$key] = $value;
+            }
+            if (! is_string($record['id'] ?? null) || ! is_string($record['meter'] ?? null)) {
+                return FakeResponse::validation('events', 'Malformed event.');
+            }
+            $records[] = $record;
+        }
+        $accepted = 0;
+        $duplicates = 0;
+        $rejected = [];
+        foreach ($records as $index => $event) {
+            $reason = array_key_exists($event['meter'], $this->eventMeters) ? $this->eventMeters[$event['meter']] : 'unknown_meter';
+            if ($reason !== null) {
+                $rejected[] = ['index' => $index, 'id' => $event['id'], 'reason' => $reason];
+            } elseif (isset($this->usageEvents[$org][$event['id']])) {
+                $duplicates++;
+            } else {
+                $this->usageEvents[$org][$event['id']] = $event;
+                $accepted++;
+            }
+        }
+
+        return FakeResponse::json(['ok' => true, 'accepted' => $accepted, 'duplicates' => $duplicates, 'rejected' => $rejected]);
     }
 
     private function usageSummary(string $org): FakeResponse
