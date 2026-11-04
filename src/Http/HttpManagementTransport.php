@@ -7,6 +7,8 @@ namespace Cbox\Billing\Client\Http;
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
+use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
@@ -20,10 +22,14 @@ use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\InvoiceRefundResult;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoiceLine;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\NewInvoice;
+use Cbox\Billing\Client\ValueObjects\OneOffCheckoutItem;
+use Cbox\Billing\Client\ValueObjects\OneOffCheckoutSession;
+use Cbox\Billing\Client\ValueObjects\OneOffQuote;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
@@ -62,7 +68,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -540,6 +546,110 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
         }
 
         throw TransportException::malformed($path, 'missing decimal field [quantity]');
+    }
+
+    public function createOneOffQuote(string $org, string $reference, string $product, string $idempotencyKey, ?string $currency = null, int $quantity = 1): OneOffQuote
+    {
+        $path = '/api/v1/one-off-quotes';
+        $payload = ['org' => $org, 'reference' => $reference, 'product' => $product, 'quantity' => $quantity];
+        if ($currency !== null) {
+            $payload['currency'] = $currency;
+        }
+
+        return $this->toOneOffQuote($this->postWithHeaders($path, $payload, ['Idempotency-Key' => $idempotencyKey]), $path);
+    }
+
+    public function oneOffQuote(string $org, string $id): OneOffQuote
+    {
+        $path = '/api/v1/one-off-quotes/'.rawurlencode($id);
+
+        return $this->toOneOffQuote($this->get($path.'?'.http_build_query(['org' => $org])), $path);
+    }
+
+    public function oneOffQuoteByReference(string $org, string $reference): OneOffQuote
+    {
+        $path = '/api/v1/one-off-quotes/by-reference';
+
+        return $this->toOneOffQuote($this->get($path.'?'.http_build_query(['org' => $org, 'reference' => $reference])), $path);
+    }
+
+    public function acceptOneOffQuote(string $org, string $id, string $idempotencyKey): OneOffQuote
+    {
+        $path = '/api/v1/one-off-quotes/'.rawurlencode($id).'/accept';
+
+        return $this->toOneOffQuote($this->postWithHeaders($path, ['org' => $org], ['Idempotency-Key' => $idempotencyKey]), $path);
+    }
+
+    public function reconcileOneOffQuote(string $org, string $id): OneOffQuote
+    {
+        $path = '/api/v1/one-off-quotes/'.rawurlencode($id).'/reconcile';
+
+        return $this->toOneOffQuote($this->post($path, ['org' => $org]), $path);
+    }
+
+    public function cancelOneOffQuote(string $org, string $id, string $idempotencyKey): OneOffQuote
+    {
+        $path = '/api/v1/one-off-quotes/'.rawurlencode($id).'/cancel';
+
+        return $this->toOneOffQuote($this->postWithHeaders($path, ['org' => $org], ['Idempotency-Key' => $idempotencyKey]), $path);
+    }
+
+    public function createOneOffQuotePaymentIntent(string $org, string $id): PaymentIntent
+    {
+        return $this->toPaymentIntent($this->post('/api/v1/one-off-quotes/'.rawurlencode($id).'/payment-intent', ['org' => $org]));
+    }
+
+    public function refundInvoice(string $org, string $number, string $idempotencyKey, string $reason = 'requested', ?int $amountMinor = null): InvoiceRefundResult
+    {
+        $path = '/api/v1/invoices/'.rawurlencode($org).'/'.rawurlencode($number).'/refunds';
+        $payload = ['reason' => $reason];
+        if ($amountMinor !== null) {
+            $payload['amount_minor'] = $amountMinor;
+        }
+        $body = $this->postWithHeaders($path, $payload, ['Idempotency-Key' => $idempotencyKey]);
+        $refund = $body['refund'] ?? null;
+
+        return new InvoiceRefundResult($this->stringField($body, 'status', $path), is_array($refund) && is_string($refund['id'] ?? null) ? $refund['id'] : null, is_int($body['approval'] ?? null) ? $body['approval'] : null);
+    }
+
+    /** @param array<string, mixed> $body */
+    private function toOneOffQuote(array $body, string $path): OneOffQuote
+    {
+        $expiresAt = $this->date($body['expires_at'] ?? null);
+        if ($expiresAt === null) {
+            throw TransportException::malformed($path, 'missing quote expiry');
+        }
+
+        return new OneOffQuote(
+            $this->stringField($body, 'id', $path), $this->stringField($body, 'organization', $path),
+            $this->stringField($body, 'reference', $path), $this->stringField($body, 'product', $path),
+            $this->intField($body, 'quantity', $path), $this->stringField($body, 'currency', $path),
+            $this->intField($body, 'net_minor', $path), $this->intField($body, 'tax_minor', $path),
+            $this->intField($body, 'total_minor', $path), $this->stringField($body, 'price_version', $path),
+            $expiresAt, $this->stringField($body, 'status', $path), is_string($body['invoice'] ?? null) ? $body['invoice'] : null,
+            $this->stringField($body, 'payment_status', $path),
+        );
+    }
+
+    /** @param list<OneOffCheckoutItem> $items */
+    public function createOneOffCheckoutSession(string $org, array $items, string $returnUrl, string $reference, string $idempotencyKey, ?string $currency = null): OneOffCheckoutSession
+    {
+        $path = '/api/v1/checkout-sessions';
+        $payload = ['org' => $org, 'items' => array_map(static fn (OneOffCheckoutItem $item): array => $item->toArray(), $items), 'return_url' => $returnUrl, 'reference' => $reference];
+        if ($currency !== null) {
+            $payload['currency'] = $currency;
+        }
+        $body = $this->postWithHeaders($path, $payload, ['Idempotency-Key' => $idempotencyKey]);
+
+        $expiresAt = $this->date($body['expires_at'] ?? null);
+        if ($expiresAt === null) {
+            throw TransportException::malformed($path, 'missing checkout expiry');
+        }
+
+        return new OneOffCheckoutSession(
+            url: array_key_exists('url', $body) ? $this->stringField($body, 'url', $path) : null,
+            expiresAt: $expiresAt,
+        );
     }
 
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession

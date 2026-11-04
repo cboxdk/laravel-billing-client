@@ -3,6 +3,18 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.11 — 2026-11-04
+
+### Added
+
+- Standalone one-off checkout with an exact external order reference and typed
+  checkout items. Replayed responses may omit the ephemeral checkout URL.
+- Durable one-off quote creation, acceptance, payment intent retrieval,
+  reconciliation and cancellation through optional transport contracts. Quotes
+  retain Billing-calculated net, tax and total amounts and current settlement state.
+- Invoice refund requests with typed completed or pending-approval receipts.
+  Scripted quote fakes retain organization boundaries without simulating charges.
+
 ## 0.4.10 — 2026-11-04
 
 ### Added

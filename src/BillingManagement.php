@@ -7,6 +7,8 @@ namespace Cbox\Billing\Client;
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
+use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
@@ -19,8 +21,12 @@ use Cbox\Billing\Client\ValueObjects\CancelPreview;
 use Cbox\Billing\Client\ValueObjects\ChangePreview;
 use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Invoice;
+use Cbox\Billing\Client\ValueObjects\InvoiceRefundResult;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
 use Cbox\Billing\Client\ValueObjects\NewInvoice;
+use Cbox\Billing\Client\ValueObjects\OneOffCheckoutItem;
+use Cbox\Billing\Client\ValueObjects\OneOffCheckoutSession;
+use Cbox\Billing\Client\ValueObjects\OneOffQuote;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
@@ -307,6 +313,88 @@ class BillingManagement
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
+    public function createOneOffQuote(string $org, string $reference, string $product, string $idempotencyKey, ?string $currency = null, int $quantity = 1): OneOffQuote
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->createOneOffQuote($org, $reference, $product, $idempotencyKey, $currency, $quantity);
+    }
+
+    public function oneOffQuote(string $org, string $id): OneOffQuote
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->oneOffQuote($org, $id);
+    }
+
+    public function oneOffQuoteByReference(string $org, string $reference): OneOffQuote
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->oneOffQuoteByReference($org, $reference);
+    }
+
+    public function acceptOneOffQuote(string $org, string $id, string $idempotencyKey): OneOffQuote
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->acceptOneOffQuote($org, $id, $idempotencyKey);
+    }
+
+    public function reconcileOneOffQuote(string $org, string $id): OneOffQuote
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->reconcileOneOffQuote($org, $id);
+    }
+
+    public function cancelOneOffQuote(string $org, string $id, string $idempotencyKey): OneOffQuote
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->cancelOneOffQuote($org, $id, $idempotencyKey);
+    }
+
+    public function createOneOffQuotePaymentIntent(string $org, string $id): PaymentIntent
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->createOneOffQuotePaymentIntent($org, $id);
+    }
+
+    public function refundInvoice(string $org, string $number, string $idempotencyKey, string $reason = 'requested', ?int $amountMinor = null): InvoiceRefundResult
+    {
+        if (! $this->transport instanceof OneOffQuoteTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffQuoteTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->refundInvoice($org, $number, $idempotencyKey, $reason, $amountMinor);
+    }
+
+    /** @param list<OneOffCheckoutItem> $items */
+    public function createOneOffCheckoutSession(string $org, array $items, string $returnUrl, string $reference, string $idempotencyKey, ?string $currency = null): OneOffCheckoutSession
+    {
+        if (! $this->transport instanceof OneOffCheckoutTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OneOffCheckoutTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
+    }
+
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
     {
         return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency);

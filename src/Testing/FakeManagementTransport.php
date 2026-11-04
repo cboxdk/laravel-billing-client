@@ -7,6 +7,7 @@ namespace Cbox\Billing\Client\Testing;
 use Cbox\Billing\Client\Contracts\BundleTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
@@ -26,6 +27,8 @@ use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoiceLine;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\NewInvoice;
+use Cbox\Billing\Client\ValueObjects\OneOffCheckoutItem;
+use Cbox\Billing\Client\ValueObjects\OneOffCheckoutSession;
 use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
@@ -88,8 +91,21 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
+    /** @var array<string, true> */
+    private array $oneOffProducts = [];
+
+    /** @var array<string, array{hash: string, expires_at: string|null}> */
+    private array $oneOffCheckouts = [];
+
+    public function withOneOffProduct(string $key): static
+    {
+        $this->oneOffProducts[$key] = true;
+
+        return $this;
+    }
+
     /** @var array<string, string|null> Seeded event meters and an optional rejection reason. */
     private array $eventMeters = [];
 
@@ -431,6 +447,12 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
     public function invoice(string $org, string $number): IssuedInvoice
     {
         return $this->wire()->invoice($org, $number);
+    }
+
+    /** @param list<OneOffCheckoutItem> $items */
+    public function createOneOffCheckoutSession(string $org, array $items, string $returnUrl, string $reference, string $idempotencyKey, ?string $currency = null): OneOffCheckoutSession
+    {
+        return $this->wire()->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
@@ -1148,6 +1170,30 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
 
         if ($this->requireProvisioned && ! isset($this->organizations[$org])) {
             return FakeResponse::error(404, 'Unknown organization.');
+        }
+
+        if (isset($payload['items']) && is_array($payload['items'])) {
+            if ($payload['items'] === []) {
+                return FakeResponse::error(422, 'At least one item is required.');
+            }
+            foreach ($payload['items'] as $item) {
+                if (! is_array($item) || ! is_string($item['product'] ?? null) || ! isset($this->oneOffProducts[$item['product']])) {
+                    return FakeResponse::error(422, 'Unknown one-off product.');
+                }
+            }
+            $key = $org.'|'.$this->idempotencyKey;
+            $hash = hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR));
+            if (isset($this->oneOffCheckouts[$key])) {
+                $previous = $this->oneOffCheckouts[$key];
+
+                return $previous['hash'] === $hash
+                    ? FakeResponse::json(['expires_at' => $previous['expires_at']], 201)
+                    : FakeResponse::json(['error' => 'idempotency_conflict'], 409);
+            }
+            $expires = $this->date((new DateTimeImmutable)->modify('+30 minutes'));
+            $this->oneOffCheckouts[$key] = ['hash' => $hash, 'expires_at' => $expires];
+
+            return FakeResponse::json(['url' => 'https://billing.example/checkout/'.rawurlencode($org).'/'.(++$this->sessionSeq), 'expires_at' => $expires], 201);
         }
 
         if (! isset($this->plans[$this->string($payload, 'plan')])) {
