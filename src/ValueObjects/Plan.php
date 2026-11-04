@@ -32,6 +32,7 @@ readonly class Plan
     /**
      * @param  list<Entitlement>  $entitlements
      * @param  array<string, int|string|bool|null>  $features
+     * @param  array<string, UsagePrice>|null  $usagePrices  Null when absent from the server; an absent meter is never a free rate.
      */
     public function __construct(
         public string $key,
@@ -44,6 +45,7 @@ readonly class Plan
         public ?string $product = null,
         public ?bool $taxInclusive = null,
         public ?PriceTax $tax = null,
+        public ?array $usagePrices = null,
     ) {}
 
     /** What the buyer pays, tax included; null when the tax is not known (pending, unavailable, an older server). */

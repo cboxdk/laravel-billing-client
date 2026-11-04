@@ -1407,6 +1407,7 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
             'product' => $plan->product,
             'entitlements' => $entitlements,
             'features' => $features,
+            ...($plan->usagePrices === null ? [] : ['usage_prices' => array_map(static fn ($rate): array => $rate->toArray(), $plan->usagePrices)]),
             'price' => ['minor' => $plan->priceMinor, 'currency' => $plan->currency, 'tax_inclusive' => $plan->taxInclusive ?? false],
         ];
     }

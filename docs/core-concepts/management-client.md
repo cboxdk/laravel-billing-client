@@ -344,3 +344,24 @@ and [the embedded payment element](../cookbook/embedded-payment-element.md).
 
 > The management API — plan catalogue, proration, invoicing — is implemented by the
 > deployable Cbox Billing service. This package is the typed client that talks to it.
+
+
+### Usage rates
+
+`Plan::usagePrices` is an optional map of meter keys to `UsagePrice` values. Each
+value has `minor`, `currency` and `per`, matching the public `GET /plans`
+`usage_prices` contract. `minor` is the charge for each started block of `per`
+units: a rate with `per: 1000` charges two blocks for 1,001 billable units. It is
+not a fractional per-unit rate. Actual allowances and billable quantities remain
+Billing's responsibility; this SDK does not calculate invoices from the map.
+
+A `null` map means the server did not provide it. An empty map or missing meter
+means no simple rate was supplied, not that usage is free. Billing omits tiered,
+dimension-dependent and percentage rates from this map. A supplied zero minor
+amount is preserved. Malformed rows, nonpositive block sizes and currencies that
+differ from the resolved plan currency fail the catalog read.
+
+These amounts follow the plan's `taxInclusive` convention. The plan's `tax` quote
+applies to its recurring price, not to these usage blocks; do not reuse that tax
+amount as a usage quote. The constructor field is optional and trailing, so old
+servers and existing hand-built Plan objects continue to work.

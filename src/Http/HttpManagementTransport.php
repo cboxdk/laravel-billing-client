@@ -37,6 +37,7 @@ use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
 use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
+use Cbox\Billing\Client\ValueObjects\UsagePrice;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -683,7 +684,33 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
             product: is_string($raw['product'] ?? null) ? $raw['product'] : null,
             taxInclusive: is_bool($price['tax_inclusive'] ?? null) ? $price['tax_inclusive'] : null,
             tax: TaxPayload::priceTax($raw['tax'] ?? null),
+            usagePrices: $this->toUsagePrices($raw['usage_prices'] ?? null, $currency),
         );
+    }
+
+    /** @return array<string, UsagePrice>|null */
+    private function toUsagePrices(mixed $raw, string $currency): ?array
+    {
+        if ($raw === null) {
+            return null;
+        }
+        if (! is_array($raw)) {
+            throw TransportException::malformed('/api/v1/plans', 'invalid usage prices');
+        }
+        $prices = [];
+        foreach ($raw as $meter => $rate) {
+            if (! is_string($meter) || $meter === '' || ! is_array($rate)
+                || ! is_int($rate['minor'] ?? null) || $rate['minor'] < 0
+                || ! is_int($rate['per'] ?? null) || $rate['per'] < 1
+                || ! is_string($rate['currency'] ?? null)
+                || strtoupper($rate['currency']) !== strtoupper($currency)) {
+                throw TransportException::malformed('/api/v1/plans', 'invalid usage rate');
+            }
+            $prices[$meter] = new UsagePrice($rate['minor'], $rate['currency'], $rate['per']);
+        }
+        ksort($prices);
+
+        return $prices;
     }
 
     /**

@@ -6,6 +6,9 @@ use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
+use Cbox\Billing\Client\Testing\FakeManagementTransport;
+use Cbox\Billing\Client\ValueObjects\Plan;
+use Cbox\Billing\Client\ValueObjects\UsagePrice;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -331,4 +334,45 @@ it('rejects the whole catalog when a row is malformed instead of silently omitti
     ]])]);
 
     expect(fn () => makeHttpManagement()->plans())->toThrow(BillingUnavailable::class);
+});
+
+it('preserves usage block rates and distinguishes absent rates from explicit zero', function (): void {
+    Http::preventStrayRequests();
+    $base = ['key' => 'usage', 'price' => ['minor' => 0, 'currency' => 'EUR']];
+    Http::fake(['billing.test/api/v1/plans' => Http::response(['data' => [
+        $base + ['usage_prices' => ['cpu' => ['minor' => 25, 'currency' => 'EUR', 'per' => 1000], 'free' => ['minor' => 0, 'currency' => 'EUR', 'per' => 1]]],
+        $base,
+        $base + ['usage_prices' => []],
+    ]])]);
+
+    [$priced, $legacy, $complex] = makeHttpManagement()->plans();
+    expect($priced->usagePrices['cpu']->toArray())->toBe(['minor' => 25, 'currency' => 'EUR', 'per' => 1000])
+        ->and($priced->usagePrices['free']->minor)->toBe(0)
+        ->and($legacy->usagePrices)->toBeNull()
+        ->and($complex->usagePrices)->toBe([]);
+});
+
+it('rejects malformed usage rates rather than inventing prices', function (mixed $prices): void {
+    Http::preventStrayRequests();
+    Http::fake(['billing.test/api/v1/plans' => Http::response(['data' => [
+        ['key' => 'usage', 'price' => ['minor' => 0, 'currency' => 'EUR'], 'usage_prices' => $prices],
+    ]])]);
+    expect(fn () => makeHttpManagement()->plans())->toThrow(BillingUnavailable::class);
+})->with([
+    'scalar' => [false],
+    'list' => [[['minor' => 10, 'currency' => 'EUR', 'per' => 1]]],
+    'missing price' => [['cpu' => ['currency' => 'EUR', 'per' => 1]]],
+    'negative price' => [['cpu' => ['minor' => -1, 'currency' => 'EUR', 'per' => 1]]],
+    'fractional price' => [['cpu' => ['minor' => 0.5, 'currency' => 'EUR', 'per' => 1]]],
+    'missing block' => [['cpu' => ['minor' => 1, 'currency' => 'EUR']]],
+    'zero block' => [['cpu' => ['minor' => 1, 'currency' => 'EUR', 'per' => 0]]],
+    'wrong currency' => [['cpu' => ['minor' => 1, 'currency' => 'USD', 'per' => 1]]],
+]);
+
+it('round trips usage rates through the shared fake server', function (): void {
+    $rate = new UsagePrice(5, 'EUR', 1000);
+    $server = (new FakeManagementTransport)->withPlan(
+        new Plan('usage', 'Usage', 0, 'EUR', 'month', [], usagePrices: ['cpu' => $rate]),
+    );
+    expect($server->plans('EUR')[0]->usagePrices['cpu']->toArray())->toBe($rate->toArray());
 });

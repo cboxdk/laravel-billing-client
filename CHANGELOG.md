@@ -3,6 +3,16 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## Unreleased
+
+### Added
+
+- Optional `Plan::usagePrices` maps meter keys to `UsagePrice` values from the
+  public catalog. A rate retains integer minor units, currency and the number of
+  units in each started block. Absent rates stay unknown, explicit zero remains
+  zero, and malformed rates reject the catalog instead of becoming free usage.
+  The shared fake server round-trips the same contract.
+
 ## 0.4.8 — 2026-11-04
 
 ### Fixed
