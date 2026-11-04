@@ -3,6 +3,15 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## Unreleased
+
+### Fixed
+
+- Catalog reads reject missing, negative, fractional or malformed prices with
+  `BillingUnavailable`, instead of inventing a zero price. Explicit zero prices,
+  integer-string minor units and legacy flat prices remain supported. A malformed
+  row fails the complete response so a consumer cannot retire an omitted plan.
+
 ## 0.4.7 — 2026-11-02
 
 A patch release. Additive only: no existing signature or default changes.

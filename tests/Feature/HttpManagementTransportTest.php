@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -289,4 +290,45 @@ it('throws on a route 404, which means a wrong base URL rather than no subscript
     ]);
 
     expect(fn () => makeHttpManagement()->subscription('org_new'))->toThrow(BillingRefused::class);
+});
+
+it('refuses malformed catalog prices instead of inventing a free plan', function (array $priceFields): void {
+    Http::fake(['billing.test/api/v1/plans' => Http::response(['plans' => [array_merge([
+        'key' => 'usage', 'name' => 'Usage', 'interval' => 'month', 'product' => 'cbox-stache',
+    ], $priceFields)]])]);
+
+    expect(fn () => makeHttpManagement()->plans())->toThrow(BillingUnavailable::class);
+})->with([
+    'missing price' => [[]],
+    'null price' => [['price' => null]],
+    'missing amount' => [['price' => ['currency' => 'EUR']]],
+    'null amount' => [['price' => ['minor' => null, 'currency' => 'EUR']]],
+    'negative amount' => [['price' => ['minor' => -1, 'currency' => 'EUR']]],
+    'fractional amount' => [['price' => ['minor' => 12.5, 'currency' => 'EUR']]],
+    'nonnumeric amount' => [['price' => ['minor' => 'unknown', 'currency' => 'EUR']]],
+    'missing currency' => [['price' => ['minor' => 0]]],
+    'malformed nested price cannot fall back' => [['price' => [], 'price_minor' => 0, 'currency' => 'EUR']],
+    'legacy missing amount' => [['currency' => 'EUR']],
+    'legacy invalid amount' => [['price_minor' => false, 'currency' => 'EUR']],
+]);
+
+it('preserves explicitly free prices and integer minor units in both catalog shapes', function (array $fields, int $amount): void {
+    Http::fake(['billing.test/api/v1/plans' => Http::response(['plans' => [array_merge([
+        'key' => 'usage', 'name' => 'Usage', 'interval' => 'month',
+    ], $fields)]])]);
+
+    expect(makeHttpManagement()->plans()[0]->priceMinor)->toBe($amount);
+})->with([
+    'zero nested' => [['price' => ['minor' => 0, 'currency' => 'EUR']], 0],
+    'integer string' => [['price' => ['minor' => '1250', 'currency' => 'EUR']], 1250],
+    'zero legacy' => [['price_minor' => 0, 'currency' => 'eur'], 0],
+]);
+
+it('rejects the whole catalog when a row is malformed instead of silently omitting it', function (): void {
+    Http::fake(['billing.test/api/v1/plans' => Http::response(['plans' => [
+        ['key' => 'valid', 'price' => ['minor' => 0, 'currency' => 'EUR']],
+        null,
+    ]])]);
+
+    expect(fn () => makeHttpManagement()->plans())->toThrow(BillingUnavailable::class);
 });

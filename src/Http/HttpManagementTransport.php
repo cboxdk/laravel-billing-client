@@ -90,9 +90,10 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
         $plans = [];
 
         foreach ($rawPlans as $raw) {
-            if (is_array($raw)) {
-                $plans[] = $this->toPlan($raw);
+            if (! is_array($raw)) {
+                throw TransportException::malformed('/api/v1/plans', 'invalid plan row');
             }
+            $plans[] = $this->toPlan($raw);
         }
 
         return $plans;
@@ -656,13 +657,26 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
 
         // The catalog endpoint nests the resolved price (`price: {minor, currency}`);
         // accept the flat `price_minor`/`currency` shape too for older services.
-        $price = is_array($raw['price'] ?? null) ? $raw['price'] : [];
+        $price = array_key_exists('price', $raw)
+            ? $raw['price']
+            : ['minor' => $raw['price_minor'] ?? null, 'currency' => $raw['currency'] ?? null];
+        if (! is_array($price)) {
+            throw TransportException::malformed('/api/v1/plans', 'missing or invalid price');
+        }
+        $minor = $price['minor'] ?? null;
+        if (is_string($minor) && preg_match('/^(0|[1-9][0-9]*)$/D', $minor) === 1) {
+            $minor = filter_var($minor, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+        }
+        $currency = $price['currency'] ?? null;
+        if (! is_int($minor) || $minor < 0 || ! is_string($currency) || preg_match('/^[A-Za-z]{3}$/D', $currency) !== 1) {
+            throw TransportException::malformed('/api/v1/plans', 'invalid price amount or currency');
+        }
 
         return new Plan(
             key: $this->stringOr($raw, 'key', ''),
             name: $this->stringOr($raw, 'name', ''),
-            priceMinor: isset($price['minor']) ? $this->toInt($price['minor']) : $this->intOr($raw, 'price_minor', 0),
-            currency: isset($price['currency']) && is_string($price['currency']) ? $price['currency'] : $this->stringOr($raw, 'currency', ''),
+            priceMinor: $minor,
+            currency: $currency,
             interval: $this->stringOr($raw, 'interval', ''),
             entitlements: $entitlements,
             features: $this->toFeatures($raw['features'] ?? null),
