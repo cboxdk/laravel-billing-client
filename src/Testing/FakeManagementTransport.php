@@ -921,6 +921,7 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
                 'overage' => $usage->overage,
                 'projected' => $usage->used,
                 'projected_overage' => $usage->overage,
+                ...($usage->breakdown === null ? [] : ['breakdown' => array_map(static fn ($group): array => $group->toArray(), $usage->breakdown)]),
             ];
         }
 

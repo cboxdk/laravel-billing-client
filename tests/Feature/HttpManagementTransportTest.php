@@ -7,7 +7,9 @@ use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Cbox\Billing\Client\Testing\FakeManagementTransport;
+use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\Plan;
+use Cbox\Billing\Client\ValueObjects\UsageGroup;
 use Cbox\Billing\Client\ValueObjects\UsagePrice;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\Request;
@@ -375,4 +377,47 @@ it('round trips usage rates through the shared fake server', function (): void {
         new Plan('usage', 'Usage', 0, 'EUR', 'month', [], usagePrices: ['cpu' => $rate]),
     );
     expect($server->plans('EUR')[0]->usagePrices['cpu']->toArray())->toBe($rate->toArray());
+});
+
+it('preserves project breakdown including unknown dimensions and absent versus empty groups', function (): void {
+    Http::preventStrayRequests();
+    $groups = [
+        ['dimensions' => ['project' => 'project_a', 'environment' => 'production'], 'used' => 35],
+        ['dimensions' => ['project' => 'project_b', 'environment' => null], 'used' => 65],
+    ];
+    $usage = ['used' => 100, 'allowance' => null, 'overage' => 100];
+    Http::fake(['billing.test/api/v1/usage/org_a' => Http::response(['meters' => [
+        'cpu' => $usage + ['breakdown' => $groups],
+        'legacy' => $usage,
+        'empty' => $usage + ['breakdown' => []],
+    ]])]);
+    $result = makeHttpManagement()->usage('org_a');
+    expect(array_map(fn ($group) => $group->toArray(), $result->for('cpu')->breakdown))->toBe($groups)
+        ->and($result->for('cpu')->used)->toBe(100)
+        ->and($result->for('legacy')->breakdown)->toBeNull()
+        ->and($result->for('empty')->breakdown)->toBe([]);
+});
+
+it('rejects malformed usage groups instead of returning a partial financial breakdown', function (mixed $groups): void {
+    Http::preventStrayRequests();
+    Http::fake(['billing.test/api/v1/usage/org_a' => Http::response(['meters' => ['cpu' => [
+        'used' => 100, 'allowance' => null, 'overage' => 100, 'breakdown' => $groups,
+    ]]])]);
+    expect(fn () => makeHttpManagement()->usage('org_a'))->toThrow(BillingUnavailable::class);
+})->with([
+    'scalar' => [false],
+    'map' => [['project' => ['dimensions' => [], 'used' => 1]]],
+    'missing quantity' => [[['dimensions' => []]]],
+    'negative quantity' => [[['dimensions' => [], 'used' => -1]]],
+    'fractional quantity' => [[['dimensions' => [], 'used' => 0.5]]],
+    'missing dimensions' => [[['used' => 1]]],
+    'numeric dimension key' => [[['used' => 1, 'dimensions' => ['project_a']]]],
+    'nested dimension' => [[['used' => 1, 'dimensions' => ['project' => ['nested']]]]],
+]);
+
+it('round trips dimensioned usage through the shared fake server', function (): void {
+    $group = new UsageGroup(['project' => 'project_a'], 35);
+    $server = (new FakeManagementTransport)->withUsage('org_a', 'cpu',
+        new MeterUsage(35, null, 35, [$group]));
+    expect($server->usage('org_a')->for('cpu')->breakdown[0]->toArray())->toBe($group->toArray());
 });

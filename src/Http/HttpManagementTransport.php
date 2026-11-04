@@ -37,6 +37,7 @@ use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
 use Cbox\Billing\Client\ValueObjects\SubscriptionDiscount;
 use Cbox\Billing\Client\ValueObjects\SubscriptionPage;
 use Cbox\Billing\Client\ValueObjects\SubscriptionResult;
+use Cbox\Billing\Client\ValueObjects\UsageGroup;
 use Cbox\Billing\Client\ValueObjects\UsagePrice;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
@@ -368,6 +369,7 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
                         $this->intField($definition, 'used', $path),
                         ($definition['allowance'] ?? null) === null ? null : $this->intField($definition, 'allowance', $path),
                         $this->intOr($definition, 'overage', 0),
+                        $this->usageGroups($definition['breakdown'] ?? null, $path),
                     );
                 }
             }
@@ -379,6 +381,34 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
             : new BillingPeriod;
 
         return new UsageSummary($meters, $period);
+    }
+
+    /** @return list<UsageGroup>|null */
+    private function usageGroups(mixed $raw, string $path): ?array
+    {
+        if ($raw === null) {
+            return null;
+        }
+        if (! is_array($raw) || ! array_is_list($raw)) {
+            throw TransportException::malformed($path, 'invalid usage breakdown');
+        }
+        $groups = [];
+        foreach ($raw as $row) {
+            if (! is_array($row) || ! is_int($row['used'] ?? null) || $row['used'] < 0
+                || ! is_array($row['dimensions'] ?? null)) {
+                throw TransportException::malformed($path, 'invalid usage group');
+            }
+            $dimensions = [];
+            foreach ($row['dimensions'] as $key => $value) {
+                if (! is_string($key) || $key === '' || (! is_string($value) && $value !== null)) {
+                    throw TransportException::malformed($path, 'invalid usage dimension');
+                }
+                $dimensions[$key] = $value;
+            }
+            $groups[] = new UsageGroup($dimensions, $row['used']);
+        }
+
+        return $groups;
     }
 
     public function invoices(string $org): array

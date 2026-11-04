@@ -365,3 +365,18 @@ These amounts follow the plan's `taxInclusive` convention. The plan's `tax` quot
 applies to its recurring price, not to these usage blocks; do not reuse that tax
 amount as a usage quote. The constructor field is optional and trailing, so old
 servers and existing hand-built Plan objects continue to work.
+
+### Grouped usage
+
+For a meter configured with `group_by` in Billing, `MeterUsage::breakdown` carries
+`UsageGroup` rows: the server's integer `used` quantity and its `dimensions` map.
+A null dimension value means the source events did not identify that dimension;
+it must not be assigned to an arbitrary project. `null` for the entire breakdown
+means the server did not supply it, whereas an empty list is an explicitly empty
+breakdown. Older servers and existing three-argument MeterUsage constructors work
+unchanged. Malformed groups fail the read rather than silently dropping usage.
+
+This is the current-period usage summary, not a historical event export or a
+per-project monetary quote. Amounts and tax must still come from Billing. Sending
+raw dimensioned usage events is a separate integration contract; reading these
+rows does not activate event collection or billing.

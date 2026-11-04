@@ -3,6 +3,15 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## Unreleased
+
+### Added
+
+- `MeterUsage::breakdown` preserves Billing's grouped quantities and dimension
+  values as `UsageGroup` rows, including unknown dimension values. Older servers
+  yield null instead of fabricated empty usage; malformed groups fail the read.
+  The shared fake supports the same round trip.
+
 ## 0.4.9 — 2026-11-04
 
 ### Added

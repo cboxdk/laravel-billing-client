@@ -11,6 +11,7 @@ namespace Cbox\Billing\Client\ValueObjects;
  */
 readonly class MeterUsage
 {
+    /** @param list<UsageGroup>|null $breakdown Null means the server did not provide a grouped breakdown. */
     public function __construct(
         public int $used,
         /**
@@ -22,6 +23,7 @@ readonly class MeterUsage
          */
         public ?int $allowance,
         public int $overage,
+        public ?array $breakdown = null,
     ) {}
 
     /** Remaining included allowance (never negative — past the allowance it is zero). */
