@@ -34,5 +34,6 @@ readonly class OrganizationProfile
         public ?bool $taxIdValidated = null,
         public bool $taxIdSupported = false,
         public bool $shared = false,
+        public ?string $billingPhone = null,
     ) {}
 }

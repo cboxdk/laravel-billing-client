@@ -627,7 +627,12 @@ class FakeManagementTransport implements BundleTransport, InvoiceTransport, Mana
             unset($attributes['billing_currency']);
             $this->organizations[$org] = array_merge($existing, $attributes);
 
-            return FakeResponse::json(['organization' => $this->presentOrganization($org)]);
+            $profile = $this->presentOrganization($org);
+            if (($payload['customer_account'] ?? false) === true) {
+                $profile['billing_phone'] = $existing['billing_phone'] ?? null;
+            }
+
+            return FakeResponse::json(['organization' => $profile]);
         }
 
         $this->organizations[$org] = $attributes;

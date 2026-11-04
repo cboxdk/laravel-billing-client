@@ -3,6 +3,10 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## 0.4.12 — 2026-11-05
+
+- Organization profiles expose the optional billing contact phone.
+
 ## 0.4.11 — 2026-11-04
 
 ### Added

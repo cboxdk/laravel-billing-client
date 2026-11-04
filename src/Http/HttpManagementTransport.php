@@ -173,6 +173,7 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
             externalRef: $text('external_ref'),
             name: $this->stringOr($raw, 'name', ''),
             billingEmail: $text('billing_email'),
+            billingPhone: $text('billing_phone'),
             addressLine1: $text('billing_address_line1'),
             addressLine2: $text('billing_address_line2'),
             postalCode: $text('billing_postal_code'),
