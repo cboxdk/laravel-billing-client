@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BillingTransport;
+use Cbox\Billing\Client\Contracts\FeatureReader;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Entitlements;
 use Cbox\Billing\Client\ValueObjects\LeaseGrant;
+use Cbox\Billing\Client\ValueObjects\OrganizationFeatures;
 use Cbox\Billing\Client\ValueObjects\RemoteReservation;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -36,9 +38,29 @@ use Illuminate\Http\Client\Request;
  * {@see refuseWith()} makes every call answer a status instead, for example a 401 for a
  * revoked token ({@see BillingRefused}), which fails closed under every policy.
  */
-class FakeBillingTransport implements BillingTransport
+class FakeBillingTransport implements BillingTransport, FeatureReader
 {
     private const string BASE_URL = 'https://billing.fake';
+
+    /** @var array<string,array<string,mixed>> */
+    private array $featureResponses = [];
+
+    /** @param array<string, int|string|bool> $values */
+    public function setFeatures(string $org, array $values, bool $suspended = false): self
+    {
+        $features = [];
+        foreach ($values as $key => $value) {
+            $features[$key] = ['type' => is_bool($value) ? 'boolean' : 'config', 'enabled' => $value !== false, 'value' => is_bool($value) ? null : $value];
+        }
+        $this->featureResponses[$org] = ['features' => $features, 'account' => ['suspended' => $suspended]];
+
+        return $this;
+    }
+
+    public function features(string $organization): OrganizationFeatures
+    {
+        return $this->wire()->features($organization);
+    }
 
     /** Seconds a lease lives, as the server's `billing.api.lease_ttl_seconds` default. */
     private const int LEASE_TTL = 300;
@@ -184,6 +206,9 @@ class FakeBillingTransport implements BillingTransport
             $method === 'POST' && $segments === ['usage'] => $this->ingest($payload),
             $method === 'POST' && $segments === ['reserve'] => $this->reserveSet($payload),
             $method === 'POST' && $segments === ['commit'] => $this->commitSet($payload),
+            $method === 'GET' && count($segments) === 3 && $segments[0] === 'entitlements' && $segments[2] === 'features' => isset($this->featureResponses[$segments[1]])
+                ? FakeResponse::json($this->featureResponses[$segments[1]])
+                : FakeResponse::json(['message' => 'No feature fixture configured'], 404),
             $method === 'GET' && count($segments) === 2 && $segments[0] === 'entitlements' => $this->presentEntitlements($segments[1]),
             default => FakeResponse::json(['message' => 'Not Found'], 404),
         };

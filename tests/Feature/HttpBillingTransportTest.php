@@ -119,3 +119,15 @@ it('keeps an unlimited meter unlimited instead of reading its null allowance as 
         ->and($entitlements->for('api.calls')?->isUnlimited())->toBeTrue()
         ->and($entitlements->for('seats')?->enabled)->toBeFalse();
 });
+
+it('reads resolved org feature limits and refuses suspended or malformed grants', function (): void {
+    $grants = ['pack' => ['type' => 'boolean', 'enabled' => true, 'value' => null], 'capacity' => ['type' => 'config', 'enabled' => true, 'value' => 3]];
+    Http::fakeSequence()->push(['features' => $grants, 'account' => ['suspended' => false]])
+        ->push(['features' => $grants, 'account' => ['suspended' => true]])
+        ->push(['features' => ['pack' => ['enabled' => 'yes']], 'account' => ['suspended' => false]]);
+    $transport = makeHttpTransport();
+    $access = $transport->features('org-test');
+    expect($access->value('pack'))->toBeTrue()->and($access->value('capacity'))->toBe(3)->and($access->value('unknown'))->toBeNull();
+    expect($transport->features('org-test')->value('pack'))->toBeNull();
+    expect(fn () => $transport->features('org-test'))->toThrow(TransportException::class);
+});
