@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
@@ -428,8 +429,16 @@ class BillingManagement
         return $this->transport->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSessionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSessionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey);
+        }
+
         return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency);
     }
 
@@ -439,8 +448,16 @@ class BillingManagement
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
-    public function createPortalSession(string $org, string $returnUrl): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSessionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSessionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->createPortalSession($org, $returnUrl, $idempotencyKey);
+        }
+
         return $this->transport->createPortalSession($org, $returnUrl);
     }
 

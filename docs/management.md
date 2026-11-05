@@ -8,3 +8,5 @@ The HTTP transport sends the key as `Idempotency-Key` to the existing public sub
 Idempotency does not approve a price or replace preview. Show Billing's current change/cancellation preview, bind the confirmation to the organization, plan and user, and retain the action record when a response is lost. Do not report a timeout as a successful change.
 
 Inject `Cbox\Billing\Client\Contracts\FeatureReader` for organization-specific grants. Its `features($org)` reads the public `GET /api/v1/entitlements/{org}/features` endpoint with the configured token. Call `value($featureKey)` for the resolved integer, string or boolean grant. Missing grants and suspended accounts return null. Transport errors remain explicit exceptions. Plan-level catalog values alone cannot reflect organization overrides.
+
+For hosted flows resumed after a timeout, supply the same `idempotencyKey` to `createCheckoutSession()` or `createPortalSession()`. The adapter sends the caller's key to Billing's session-creation endpoint. Use separate identities for different session types.

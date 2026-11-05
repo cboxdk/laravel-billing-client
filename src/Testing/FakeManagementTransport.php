@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
@@ -92,7 +93,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     /** @var array<string, true> */
     private array $oneOffProducts = [];
@@ -476,14 +477,14 @@ class FakeManagementTransport implements BundleTransport, IdempotentSubscription
         return $this->wire()->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
     {
-        return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency);
+        return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey);
     }
 
-    public function createPortalSession(string $org, string $returnUrl): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
     {
-        return $this->wire()->createPortalSession($org, $returnUrl);
+        return $this->wire()->createPortalSession($org, $returnUrl, $idempotencyKey);
     }
 
     public function createSetupIntent(string $org): SetupIntent

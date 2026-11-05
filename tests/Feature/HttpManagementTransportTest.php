@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Cbox\Billing\Client\BillingManagement;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -420,4 +421,14 @@ it('round trips dimensioned usage through the shared fake server', function (): 
     $server = (new FakeManagementTransport)->withUsage('org_a', 'cpu',
         new MeterUsage(35, null, 35, [$group]));
     expect($server->usage('org_a')->for('cpu')->breakdown[0]->toArray())->toBe($group->toArray());
+});
+
+it('forwards stable identities for hosted checkout and portal retries', function (): void {
+    Http::fake(['billing.test/api/v1/*' => Http::response(['url' => 'https://billing.test/session'])]);
+    $billing = new BillingManagement(makeHttpManagement());
+    $billing->createCheckoutSession('customer', 'standard', 'https://app.test/return', idempotencyKey: 'review-checkout');
+    $billing->createPortalSession('customer', 'https://app.test/return', 'review-portal');
+    Http::assertSent(fn (Request $r): bool => str_ends_with($r->url(), '/checkout-sessions') && $r->hasHeader('Idempotency-Key', 'review-checkout'));
+    Http::assertSent(fn (Request $r): bool => str_ends_with($r->url(), '/portal-sessions') && $r->hasHeader('Idempotency-Key', 'review-portal'));
+    expect(fn () => $billing->createPortalSession('customer', 'https://app.test/return', ''))->toThrow(InvalidArgumentException::class);
 });

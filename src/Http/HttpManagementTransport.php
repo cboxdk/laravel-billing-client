@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
@@ -69,7 +70,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -653,7 +654,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSubscription
         );
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
     {
         $path = '/api/v1/checkout-sessions';
 
@@ -664,7 +665,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSubscription
             $payload['currency'] = $currency;
         }
 
-        $body = $this->post($path, $payload);
+        $body = $this->postWithHeaders($path, $payload, $this->sessionHeaders($idempotencyKey));
         $raw = is_array($body['checkout_session'] ?? null) ? $body['checkout_session'] : $body;
 
         return new CheckoutSession(
@@ -673,13 +674,26 @@ class HttpManagementTransport implements BundleTransport, IdempotentSubscription
         );
     }
 
-    public function createPortalSession(string $org, string $returnUrl): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
     {
         $path = '/api/v1/portal-sessions';
-        $body = $this->post($path, ['org' => $org, 'return_url' => $returnUrl]);
+        $body = $this->postWithHeaders($path, ['org' => $org, 'return_url' => $returnUrl], $this->sessionHeaders($idempotencyKey));
         $raw = is_array($body['portal_session'] ?? null) ? $body['portal_session'] : $body;
 
         return new PortalSession(url: $this->stringField($raw, 'url', $path));
+    }
+
+    /** @return array<string,string> */
+    private function sessionHeaders(?string $key): array
+    {
+        if ($key === null) {
+            return [];
+        }
+        if ($key === '' || strlen($key) > 190 || preg_match('/[[:cntrl:]]/', $key)) {
+            throw new InvalidArgumentException('Invalid session idempotency key.');
+        }
+
+        return ['Idempotency-Key' => $key];
     }
 
     public function createSetupIntent(string $org): SetupIntent
