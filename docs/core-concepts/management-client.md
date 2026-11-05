@@ -414,3 +414,5 @@ For tests, seed `FakeManagementTransport::withUsageEventMeter($meter)` and inspe
 seeds another rejection reason. Replays deduplicate within that fake instance and
 organization. The fake exercises the real HTTP response parser but does not simulate
 retention expiry, time-window aggregation, invoice pricing or agreement eligibility.
+
+Customer account profiles expose the saved billing phone as the nullable `billingPhone` property.

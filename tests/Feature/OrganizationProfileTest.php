@@ -25,13 +25,14 @@ it('returns what billing stores for the organization', function (): void {
     $http = new HttpFactory;
     $http->fake(['billing.test/api/v1/organizations/org_1' => $http->response(['organization' => [
         'id' => '01J', 'external_ref' => 'org_1', 'name' => 'Klubben', 'billing_email' => 'k@klubben.test',
-        'billing_address_line1' => 'Vejen 1', 'billing_postal_code' => '8000', 'billing_city' => 'Aarhus',
+        'billing_phone' => '+45 32 12 34 56', 'billing_address_line1' => 'Vejen 1', 'billing_postal_code' => '8000', 'billing_city' => 'Aarhus',
         'billing_country' => 'DK', 'tax_id' => 'DK12345678', 'tax_id_validated' => true, 'account' => 'owned',
     ]], 200)]);
 
     $profile = profileClient($http)->upsertOrganization('org_1', ['name' => 'Klubben', 'tax_id' => 'DK12345678']);
 
     expect($profile->id)->toBe('01J')
+        ->and($profile->billingPhone)->toBe('+45 32 12 34 56')
         ->and($profile->externalRef)->toBe('org_1')
         ->and($profile->city)->toBe('Aarhus')
         ->and($profile->taxId)->toBe('DK12345678')
@@ -49,6 +50,7 @@ it('reads a shared account and an older server that does not answer the VAT numb
     $profile = profileClient($http)->upsertOrganization('org_1', ['name' => 'Klubben']);
 
     expect($profile->shared)->toBeTrue()
+        ->and($profile->billingPhone)->toBeNull()
         ->and($profile->city)->toBeNull()
         ->and($profile->taxIdSupported)->toBeFalse()
         ->and($profile->taxIdValidated)->toBeNull();
