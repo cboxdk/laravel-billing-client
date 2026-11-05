@@ -11,6 +11,7 @@ use Cbox\Billing\Client\Console\SweepReservationsCommand;
 use Cbox\Billing\Client\Contracts\AllowanceSnapshots;
 use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\BillingTransport;
+use Cbox\Billing\Client\Contracts\FeatureReader;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\ReservationRegistry;
@@ -106,7 +107,9 @@ class ClientServiceProvider extends ServiceProvider
 
     private function registerTransport(): void
     {
-        $this->app->singleton(BillingTransport::class, static function (Application $app): HttpBillingTransport {
+        $this->app->alias(HttpBillingTransport::class, BillingTransport::class);
+        $this->app->alias(HttpBillingTransport::class, FeatureReader::class);
+        $this->app->singleton(HttpBillingTransport::class, static function (Application $app): HttpBillingTransport {
             $config = $app->make(Config::class);
 
             return new HttpBillingTransport(

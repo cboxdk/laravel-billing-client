@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
@@ -68,7 +70,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -192,9 +194,9 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
         );
     }
 
-    public function subscribe(string $org, string $plan): SubscriptionResult
+    public function subscribe(string $org, string $plan, ?string $idempotencyKey = null): SubscriptionResult
     {
-        $body = $this->post('/api/v1/subscriptions', ['org' => $org, 'plan' => $plan]);
+        $body = $this->postWithHeaders('/api/v1/subscriptions', ['org' => $org, 'plan' => $plan], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]);
 
         $rawSubscription = $body['subscription'] ?? null;
 
@@ -266,22 +268,22 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
      * required `$body['subscription']` and therefore threw on EVERY call, against every version of
      * the server. It now returns the change preview the endpoint actually produces.
      */
-    public function changePlan(string $org, string $plan): ChangePreview
+    public function changePlan(string $org, string $plan, ?string $idempotencyKey = null): ChangePreview
     {
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/change';
 
-        return $this->toChangePreview($this->post($path, ['plan' => $plan]), $path);
+        return $this->toChangePreview($this->postWithHeaders($path, ['plan' => $plan], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]), $path);
     }
 
     /**
      * `POST /subscriptions/{org}/cancel` answers with the subscription UNWRAPPED. Requiring a
      * `subscription` envelope made this throw on every call.
      */
-    public function cancel(string $org, bool $atPeriodEnd): Subscription
+    public function cancel(string $org, bool $atPeriodEnd, ?string $idempotencyKey = null): Subscription
     {
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/cancel';
 
-        return $this->toSubscription($this->post($path, ['at_period_end' => $atPeriodEnd]), $path);
+        return $this->toSubscription($this->postWithHeaders($path, ['at_period_end' => $atPeriodEnd], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]), $path);
     }
 
     /**
@@ -326,11 +328,11 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
      * `POST /subscriptions/{org}/reactivate` answers with the subscription unwrapped, like
      * `/cancel`. No body is sent.
      */
-    public function reactivate(string $org): Subscription
+    public function reactivate(string $org, ?string $idempotencyKey = null): Subscription
     {
         $path = '/api/v1/subscriptions/'.rawurlencode($org).'/reactivate';
 
-        return $this->toSubscription($this->post($path, []), $path);
+        return $this->toSubscription($this->postWithHeaders($path, [], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]), $path);
     }
 
     /**
@@ -653,7 +655,7 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
         );
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
     {
         $path = '/api/v1/checkout-sessions';
 
@@ -664,7 +666,7 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
             $payload['currency'] = $currency;
         }
 
-        $body = $this->post($path, $payload);
+        $body = $this->postWithHeaders($path, $payload, $this->sessionHeaders($idempotencyKey));
         $raw = is_array($body['checkout_session'] ?? null) ? $body['checkout_session'] : $body;
 
         return new CheckoutSession(
@@ -673,13 +675,26 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
         );
     }
 
-    public function createPortalSession(string $org, string $returnUrl): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
     {
         $path = '/api/v1/portal-sessions';
-        $body = $this->post($path, ['org' => $org, 'return_url' => $returnUrl]);
+        $body = $this->postWithHeaders($path, ['org' => $org, 'return_url' => $returnUrl], $this->sessionHeaders($idempotencyKey));
         $raw = is_array($body['portal_session'] ?? null) ? $body['portal_session'] : $body;
 
         return new PortalSession(url: $this->stringField($raw, 'url', $path));
+    }
+
+    /** @return array<string,string> */
+    private function sessionHeaders(?string $key): array
+    {
+        if ($key === null) {
+            return [];
+        }
+        if ($key === '' || strlen($key) > 190 || preg_match('/[[:cntrl:]]/', $key)) {
+            throw new InvalidArgumentException('Invalid session idempotency key.');
+        }
+
+        return ['Idempotency-Key' => $key];
     }
 
     public function createSetupIntent(string $org): SetupIntent
@@ -1108,6 +1123,42 @@ class HttpManagementTransport implements BundleTransport, InvoiceTransport, Mana
         $decoded = json_decode((string) $body, true);
 
         return is_array($decoded) && is_string($decoded['error'] ?? null);
+    }
+
+    public function subscribeIdempotently(string $org, string $plan, string $idempotencyKey): SubscriptionResult
+    {
+        if ($idempotencyKey === '' || strlen($idempotencyKey) > 190) {
+            throw new InvalidArgumentException('Idempotency key must contain 1–190 bytes.');
+        }
+
+        return $this->subscribe($org, $plan, $idempotencyKey);
+    }
+
+    public function changePlanIdempotently(string $org, string $plan, string $idempotencyKey): ChangePreview
+    {
+        if ($idempotencyKey === '' || strlen($idempotencyKey) > 190) {
+            throw new InvalidArgumentException('Idempotency key must contain 1–190 bytes.');
+        }
+
+        return $this->changePlan($org, $plan, $idempotencyKey);
+    }
+
+    public function cancelIdempotently(string $org, bool $atPeriodEnd, string $idempotencyKey): Subscription
+    {
+        if ($idempotencyKey === '' || strlen($idempotencyKey) > 190) {
+            throw new InvalidArgumentException('Idempotency key must contain 1–190 bytes.');
+        }
+
+        return $this->cancel($org, $atPeriodEnd, $idempotencyKey);
+    }
+
+    public function reactivateIdempotently(string $org, string $idempotencyKey): Subscription
+    {
+        if ($idempotencyKey === '' || strlen($idempotencyKey) > 190) {
+            throw new InvalidArgumentException('Idempotency key must contain 1–190 bytes.');
+        }
+
+        return $this->reactivate($org, $idempotencyKey);
     }
 
     private function request(): PendingRequest

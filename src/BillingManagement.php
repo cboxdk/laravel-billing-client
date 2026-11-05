@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
+use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
@@ -138,8 +140,16 @@ class BillingManagement
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
-    public function subscribe(string $org, string $plan): SubscriptionResult
+    public function subscribe(string $org, string $plan, ?string $idempotencyKey = null): SubscriptionResult
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSubscriptionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSubscriptionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->subscribeIdempotently($org, $plan, $idempotencyKey);
+        }
+
         return $this->transport->subscribe($org, $plan);
     }
 
@@ -164,8 +174,16 @@ class BillingManagement
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
-    public function changePlan(string $org, string $plan): ChangePreview
+    public function changePlan(string $org, string $plan, ?string $idempotencyKey = null): ChangePreview
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSubscriptionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSubscriptionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->changePlanIdempotently($org, $plan, $idempotencyKey);
+        }
+
         return $this->transport->changePlan($org, $plan);
     }
 
@@ -178,8 +196,16 @@ class BillingManagement
      * @throws BillingRefused when billing refuses (no subscription → 404)
      * @throws BillingUnavailable when billing cannot answer
      */
-    public function cancel(string $org, bool $atPeriodEnd = true): Subscription
+    public function cancel(string $org, bool $atPeriodEnd = true, ?string $idempotencyKey = null): Subscription
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSubscriptionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSubscriptionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->cancelIdempotently($org, $atPeriodEnd, $idempotencyKey);
+        }
+
         return $this->transport->cancel($org, $atPeriodEnd);
     }
 
@@ -191,8 +217,16 @@ class BillingManagement
      * @throws BillingUnavailable when billing cannot answer
      * @throws UnsupportedOperation when the transport does not implement {@see SubscriptionTransport}
      */
-    public function reactivate(string $org): Subscription
+    public function reactivate(string $org, ?string $idempotencyKey = null): Subscription
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSubscriptionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSubscriptionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->reactivateIdempotently($org, $idempotencyKey);
+        }
+
         return $this->subscriptionTransport(__FUNCTION__)->reactivate($org);
     }
 
@@ -395,8 +429,16 @@ class BillingManagement
         return $this->transport->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSessionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSessionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey);
+        }
+
         return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency);
     }
 
@@ -406,8 +448,16 @@ class BillingManagement
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
-    public function createPortalSession(string $org, string $returnUrl): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
     {
+        if ($idempotencyKey !== null) {
+            if (! $this->transport instanceof IdempotentSessionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, IdempotentSessionTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->createPortalSession($org, $returnUrl, $idempotencyKey);
+        }
+
         return $this->transport->createPortalSession($org, $returnUrl);
     }
 

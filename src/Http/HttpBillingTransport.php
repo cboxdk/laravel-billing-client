@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BillingTransport;
+use Cbox\Billing\Client\Contracts\FeatureReader;
 use Cbox\Billing\Client\Enums\ReserveOutcome;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
@@ -15,6 +16,7 @@ use Cbox\Billing\Client\ValueObjects\Entitlements;
 use Cbox\Billing\Client\ValueObjects\LeaseGrant;
 use Cbox\Billing\Client\ValueObjects\MeterActual;
 use Cbox\Billing\Client\ValueObjects\MeterEstimate;
+use Cbox\Billing\Client\ValueObjects\OrganizationFeatures;
 use Cbox\Billing\Client\ValueObjects\RemoteReservation;
 use DateTimeImmutable;
 use Illuminate\Http\Client\ConnectionException;
@@ -32,7 +34,7 @@ use Throwable;
  * the wire is validated and cast explicitly; a missing or wrong-typed field is a
  * malformed response, not a silent zero.
  */
-class HttpBillingTransport implements BillingTransport
+class HttpBillingTransport implements BillingTransport, FeatureReader
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -95,6 +97,38 @@ class HttpBillingTransport implements BillingTransport
                 $actuals,
             ),
         ]);
+    }
+
+    public function features(string $organization): OrganizationFeatures
+    {
+        $path = '/api/v1/entitlements/'.rawurlencode($organization).'/features';
+        $body = $this->get($path);
+        $account = $body['account'] ?? null;
+        $features = $body['features'] ?? null;
+        if (! is_array($features) || ! is_array($account) || ! is_bool($account['suspended'] ?? null)) {
+            throw TransportException::malformed($path, 'Invalid account or feature set.');
+        }
+
+        $grants = [];
+        foreach ($features as $key => $feature) {
+            if (! is_string($key) || ! is_array($feature) || ! is_bool($feature['enabled'] ?? null)) {
+                throw TransportException::malformed($path, 'Invalid feature grant.');
+            }
+            if (! $feature['enabled']) {
+                continue;
+            }
+            $type = $feature['type'] ?? null;
+            $value = $feature['value'] ?? null;
+            if ($type === 'boolean' && $value === null) {
+                $grants[$key] = true;
+            } elseif ($type === 'config' && (is_string($value) || is_int($value))) {
+                $grants[$key] = $value;
+            } else {
+                throw TransportException::malformed($path, 'Invalid feature type or value.');
+            }
+        }
+
+        return new OrganizationFeatures($account['suspended'], $grants);
     }
 
     public function entitlements(string $org): Entitlements
