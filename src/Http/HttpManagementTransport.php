@@ -12,6 +12,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
@@ -27,6 +28,9 @@ use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\InvoiceRefundResult;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoiceLine;
+use Cbox\Billing\Client\ValueObjects\LimitIncrease;
+use Cbox\Billing\Client\ValueObjects\LimitIncreaseInput;
+use Cbox\Billing\Client\ValueObjects\LimitIncreasePage;
 use Cbox\Billing\Client\ValueObjects\MeterUsage;
 use Cbox\Billing\Client\ValueObjects\NewInvoice;
 use Cbox\Billing\Client\ValueObjects\OneOffCheckoutItem;
@@ -40,6 +44,7 @@ use Cbox\Billing\Client\ValueObjects\PendingChange;
 use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\PreviewLine;
+use Cbox\Billing\Client\ValueObjects\ResourceLimit;
 use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
@@ -70,7 +75,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -372,6 +377,64 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             'events' => array_map(static fn (UsageEvent $event): array => $event->toArray(), $events)]);
 
         return UsageEventReceipt::fromResponse($body, $events);
+    }
+
+    /** @return array<string, ResourceLimit> */
+    public function resourceLimits(string $org, ?string $product = null): array
+    {
+        $path = $this->resourcePath($org, 'limits', $product);
+
+        return ResourceLimitPayload::limits($this->get($path), $path);
+    }
+
+    public function limitIncreaseRequests(string $org, int $page = 1, ?string $product = null): LimitIncreasePage
+    {
+        if ($page < 1) {
+            throw new InvalidArgumentException('The page must be positive.');
+        }
+        $path = $this->resourcePath($org, 'limit-increase-requests', $product, $page);
+
+        $result = ResourceLimitPayload::page($this->get($path), $path);
+        if ($result->currentPage !== $page) {
+            throw TransportException::malformed($path, 'response page does not match the request');
+        }
+
+        return $result;
+    }
+
+    public function requestLimitIncrease(string $org, LimitIncreaseInput $request, ?string $product = null): LimitIncrease
+    {
+        $path = $this->resourcePath($org, 'limit-increase-requests', $product);
+        $receipt = ResourceLimitPayload::request($this->post($path, $request->toArray()), $path);
+        if ($receipt->requestKey !== $request->requestKey || $receipt->feature !== $request->feature || $receipt->requestedLimit !== $request->requestedLimit || $receipt->reason !== $request->reason) {
+            throw TransportException::malformed($path, 'receipt does not match the submitted request');
+        }
+
+        return $receipt;
+    }
+
+    public function cancelLimitIncrease(string $org, int $requestId, ?string $product = null): LimitIncrease
+    {
+        if ($requestId < 1) {
+            throw new InvalidArgumentException('The request id must be positive.');
+        }
+        $path = $this->resourcePath($org, 'limit-increase-requests/'.$requestId.'/cancel', $product);
+        $receipt = ResourceLimitPayload::request($this->post($path, []), $path);
+        if ($receipt->id !== $requestId || $receipt->status !== 'cancelled') {
+            throw TransportException::malformed($path, 'cancellation does not match the request');
+        }
+
+        return $receipt;
+    }
+
+    private function resourcePath(string $org, string $suffix, ?string $product, ?int $page = null): string
+    {
+        if (trim($org) === '' || ($product !== null && trim($product) === '')) {
+            throw new InvalidArgumentException('Organization and any supplied product must be non-empty.');
+        }
+        $query = http_build_query(array_filter(['product' => $product, 'page' => $page], static fn ($value) => $value !== null), '', '&', PHP_QUERY_RFC3986);
+
+        return '/api/v1/organizations/'.rawurlencode($org).'/'.$suffix.($query === '' ? '' : '?'.$query);
     }
 
     public function usage(string $org): UsageSummary

@@ -11,6 +11,7 @@ use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
@@ -93,8 +94,10 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
+    use InteractsWithResourceLimits;
+
     /** @var array<string, true> */
     private array $oneOffProducts = [];
 

@@ -416,3 +416,44 @@ organization. The fake exercises the real HTTP response parser but does not simu
 retention expiry, time-window aggregation, invoice pricing or agreement eligibility.
 
 Customer account profiles expose the saved billing phone as the nullable `billingPhone` property.
+
+## Requestable resource limits
+
+The optional `ResourceLimitTransport` adds `resourceLimits`,
+`limitIncreaseRequests`, `requestLimitIncrease` and `cancelLimitIncrease` to
+`BillingManagement`. An older custom transport throws `UnsupportedOperation`;
+an older server's 404 remains a refusal. These calls do not purchase resources,
+change prices or grant postpaid credit.
+
+```php
+$limits = $billing->resourceLimits($organizationId, 'hosting');
+$sites = $limits['max_sites'] ?? null;
+$ceiling = $sites?->ceilingAt(new DateTimeImmutable, maximumAgeSeconds: 30);
+// null means unknown: refuse growth and obtain fresh authoritative limits.
+
+$request = new \Cbox\Billing\Client\ValueObjects\LimitIncreaseInput(
+    requestKey: $durableUuid,
+    feature: 'max_sites',
+    requestedLimit: 30,
+    reason: 'We are adding more customer sites.',
+);
+$receipt = $billing->requestLimitIncrease($organizationId, $request, 'hosting');
+```
+
+Persist the UUID before sending and reuse it with exactly the same details after
+a lost response. A receipt describes a request; only a fresh `resourceLimits`
+answer establishes the effective ceiling. Approval and revocation belong to
+Billing's operator API, not this customer-facing client. The requested value may
+be partially approved, rejected, expired or revoked.
+
+A ceiling is organization-wide for the selected product. It is not an inventory
+reservation, recurring usage allowance, spend cap or unpaid-exposure allowance.
+The host must serialize its resource admission and check each applicable bound.
+`ceilingAt` returns null for future observations, excessive age or an expired
+grant. It never falls back to a stale higher limit; zero remains a real limit.
+The example's 30 seconds is a host freshness choice, not a server lease guarantee.
+
+The shared `FakeManagementTransport::withResourceLimits` scripts typed ceilings
+per organization/product. It supports pending request replay and cancellation,
+pagination and the existing `takeDown` / `refuseWith` failure controls. It never
+automatically approves requests or simulates a credit review.

@@ -3,6 +3,13 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+## Unreleased
+
+- Optional resource limit reads, durable increase requests, history and cancellation.
+  Strict response validation preserves zero, refuses inconsistent limits and exposes
+  observation/expiry times. Resource ceilings never grant monetary credit.
+- Typed limit receipts and shared fake support without breaking older transports.
+
 ## 0.4.12 — 2026-11-05
 
 - Organization profiles expose the optional billing contact phone.

@@ -12,6 +12,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
@@ -25,6 +26,9 @@ use Cbox\Billing\Client\ValueObjects\CheckoutSession;
 use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\InvoiceRefundResult;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
+use Cbox\Billing\Client\ValueObjects\LimitIncrease;
+use Cbox\Billing\Client\ValueObjects\LimitIncreaseInput;
+use Cbox\Billing\Client\ValueObjects\LimitIncreasePage;
 use Cbox\Billing\Client\ValueObjects\NewInvoice;
 use Cbox\Billing\Client\ValueObjects\OneOffCheckoutItem;
 use Cbox\Billing\Client\ValueObjects\OneOffCheckoutSession;
@@ -35,6 +39,7 @@ use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
 use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
+use Cbox\Billing\Client\ValueObjects\ResourceLimit;
 use Cbox\Billing\Client\ValueObjects\SetupIntent;
 use Cbox\Billing\Client\ValueObjects\Subscription;
 use Cbox\Billing\Client\ValueObjects\SubscriptionChange;
@@ -321,6 +326,43 @@ class BillingManagement
         }
 
         return $this->transport->ingestUsageEvents($org, $events);
+    }
+
+    /** @return array<string, ResourceLimit> */
+    public function resourceLimits(string $org, ?string $product = null): array
+    {
+        if (! $this->transport instanceof ResourceLimitTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, ResourceLimitTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->resourceLimits($org, $product);
+    }
+
+    public function limitIncreaseRequests(string $org, int $page = 1, ?string $product = null): LimitIncreasePage
+    {
+        if (! $this->transport instanceof ResourceLimitTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, ResourceLimitTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->limitIncreaseRequests($org, $page, $product);
+    }
+
+    public function requestLimitIncrease(string $org, LimitIncreaseInput $request, ?string $product = null): LimitIncrease
+    {
+        if (! $this->transport instanceof ResourceLimitTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, ResourceLimitTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->requestLimitIncrease($org, $request, $product);
+    }
+
+    public function cancelLimitIncrease(string $org, int $requestId, ?string $product = null): LimitIncrease
+    {
+        if (! $this->transport instanceof ResourceLimitTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, ResourceLimitTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->cancelLimitIncrease($org, $requestId, $product);
     }
 
     public function usage(string $org): UsageSummary
