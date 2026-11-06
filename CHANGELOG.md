@@ -5,10 +5,13 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## Unreleased
 
+- Optional idempotent subscription and session operations, and organization feature
+  reads. Existing custom transports remain supported.
 - Optional resource limit reads, durable increase requests, history and cancellation.
   Strict response validation preserves zero, refuses inconsistent limits and exposes
   observation/expiry times. Resource ceilings never grant monetary credit.
 - Typed limit receipts and shared fake support without breaking older transports.
+- Development test support includes Pest 5; runtime requirements are unchanged.
 
 ## 0.4.12 — 2026-11-05
 
