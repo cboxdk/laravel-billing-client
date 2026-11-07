@@ -1,0 +1,11 @@
+{
+  "upstream_head": "86e35e1b8f0296f168cebdbb92f295050c8a261a",
+  "upstream_branch": "sd/billing-oneoff-order-correlation",
+  "target_version": "0.4.14",
+  "status": "unpublished candidate based on actual upstream history",
+  "source_manifest": "evidence/laravel-billing-client-final-source-hashes.json",
+  "publication_parent": "be2153272bde602f57d29039d53430d37f1e9d2a",
+  "restored_public_files": [],
+  "revision": 3,
+  "changes_since_revision_2": "Complete invoice/card cursor pagination, bounded and fail-closed; RC.2 artifact."
+}

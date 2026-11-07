@@ -6,13 +6,16 @@ namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BillingTransport;
 use Cbox\Billing\Client\Contracts\FeatureReader;
+use Cbox\Billing\Client\Contracts\FeatureTransport;
+use Cbox\Billing\Client\Enums\FeatureType;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Entitlements;
+use Cbox\Billing\Client\ValueObjects\FeatureEntitlement;
+use Cbox\Billing\Client\ValueObjects\FeatureEntitlements;
 use Cbox\Billing\Client\ValueObjects\LeaseGrant;
-use Cbox\Billing\Client\ValueObjects\OrganizationFeatures;
 use Cbox\Billing\Client\ValueObjects\RemoteReservation;
 use DateTimeImmutable;
 use DateTimeInterface;
@@ -38,28 +41,19 @@ use Illuminate\Http\Client\Request;
  * {@see refuseWith()} makes every call answer a status instead, for example a 401 for a
  * revoked token ({@see BillingRefused}), which fails closed under every policy.
  */
-class FakeBillingTransport implements BillingTransport, FeatureReader
+class FakeBillingTransport implements BillingTransport, FeatureReader, FeatureTransport
 {
     private const string BASE_URL = 'https://billing.fake';
-
-    /** @var array<string,array<string,mixed>> */
-    private array $featureResponses = [];
 
     /** @param array<string, int|string|bool> $values */
     public function setFeatures(string $org, array $values, bool $suspended = false): self
     {
-        $features = [];
+        $this->featureGrants[$org] = [];
         foreach ($values as $key => $value) {
-            $features[$key] = ['type' => is_bool($value) ? 'boolean' : 'config', 'enabled' => $value !== false, 'value' => is_bool($value) ? null : $value];
+            $this->feature($org, new FeatureEntitlement($key, is_bool($value) ? FeatureType::Boolean : FeatureType::Config, $value !== false, is_bool($value) ? null : $value));
         }
-        $this->featureResponses[$org] = ['features' => $features, 'account' => ['suspended' => $suspended]];
 
-        return $this;
-    }
-
-    public function features(string $organization): OrganizationFeatures
-    {
-        return $this->wire()->features($organization);
+        return $this->suspendAccount($org, $suspended);
     }
 
     /** Seconds a lease lives, as the server's `billing.api.lease_ttl_seconds` default. */
@@ -91,6 +85,33 @@ class FakeBillingTransport implements BillingTransport, FeatureReader
     private int $reservationSeq = 0;
 
     private ?HttpBillingTransport $wire = null;
+
+    /** @var array<string, array<string, FeatureEntitlement>> */
+    private array $featureGrants = [];
+
+    /** @var array<string, bool> */
+    private array $suspendedAccounts = [];
+
+    public function feature(string $org, FeatureEntitlement $feature): self
+    {
+        $this->featureGrants[$org][$feature->key] = $feature;
+
+        return $this;
+    }
+
+    public function suspendAccount(string $org, bool $suspended = true): self
+    {
+        $this->suspendedAccounts[$org] = $suspended;
+
+        return $this;
+    }
+
+    public function features(string $organization): FeatureEntitlements
+    {
+        $org = $organization;
+
+        return $this->wire()->features($org);
+    }
 
     /** Give (org, meter) a total central allowance to lease from. */
     public function grant(string $org, string $meter, int $allowance): self
@@ -206,9 +227,7 @@ class FakeBillingTransport implements BillingTransport, FeatureReader
             $method === 'POST' && $segments === ['usage'] => $this->ingest($payload),
             $method === 'POST' && $segments === ['reserve'] => $this->reserveSet($payload),
             $method === 'POST' && $segments === ['commit'] => $this->commitSet($payload),
-            $method === 'GET' && count($segments) === 3 && $segments[0] === 'entitlements' && $segments[2] === 'features' => isset($this->featureResponses[$segments[1]])
-                ? FakeResponse::json($this->featureResponses[$segments[1]])
-                : FakeResponse::json(['message' => 'No feature fixture configured'], 404),
+            $method === 'GET' && count($segments) === 3 && $segments[0] === 'entitlements' && $segments[2] === 'features' => FakeResponse::json(['features' => array_map(static fn (FeatureEntitlement $feature): array => $feature->toArray(), $this->featureGrants[$segments[1]] ?? []), 'account' => ['suspended' => $this->suspendedAccounts[$segments[1]] ?? false]]),
             $method === 'GET' && count($segments) === 2 && $segments[0] === 'entitlements' => $this->presentEntitlements($segments[1]),
             default => FakeResponse::json(['message' => 'Not Found'], 404),
         };

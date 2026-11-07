@@ -134,7 +134,13 @@ it('provisions an organization in the recorded shape', function (): void {
         $this->markTestSkipped('BILLING_CONTRACT_ORG is set; not provisioning.');
     }
 
-    [$status, $body] = contractRaw('PUT', '/api/v1/organizations/'.rawurlencode(contractOrg()), ['name' => 'SDK contract suite']);
+    [$status, $body] = contractRaw('PUT', '/api/v1/organizations/'.rawurlencode(contractOrg()), [
+        'name' => 'SDK contract suite',
+        'billing_country' => 'DK',
+        'billing_address_line1' => 'Contract test address 1',
+        'billing_postal_code' => '2100',
+        'billing_city' => 'Copenhagen',
+    ]);
     expectShape('organization-upsert', $status, $body);
 
     // A repeat is an idempotent update: 200, same shape.
@@ -157,6 +163,19 @@ it('serves entitlements in the recorded shape', function (): void {
     expectShape('entitlements', $status, $body);
 
     expect(contractEnforcement()->entitlements(contractOrg())->org)->toBe(contractOrg());
+});
+
+it('reads live feature decisions without granting access from the published catalog', function (): void {
+    $features = contractEnforcement()->features(contractOrg());
+
+    expect($features->org)->toBe(contractOrg())
+        ->and($features->enabled('sdk-contract.unassigned-feature'))->toBeFalse();
+
+    if (contractEnv('BILLING_CONTRACT_ORG') === null) {
+        foreach ($features->features as $feature) {
+            expect($feature->enabled)->toBeFalse('A fresh organization has no assigned feature entitlements.');
+        }
+    }
 });
 
 it('serves usage and invoices in the recorded shape', function (): void {

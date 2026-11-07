@@ -499,13 +499,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     public function invoices(string $org): array
     {
         $path = '/api/v1/invoices/'.rawurlencode($org);
-        $body = $this->get($path);
-
-        $rawInvoices = $body['invoices'] ?? $body['data'] ?? null;
-
-        if (! is_array($rawInvoices)) {
-            throw TransportException::malformed($path, 'missing invoices array');
-        }
+        $rawInvoices = $this->allPages($path, 'invoices');
 
         $invoices = [];
 
@@ -815,13 +809,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     public function paymentMethods(string $org): array
     {
         $path = '/api/v1/payment-methods/'.rawurlencode($org);
-        $body = $this->get($path);
-
-        $rawMethods = $body['payment_methods'] ?? $body['data'] ?? null;
-
-        if (! is_array($rawMethods)) {
-            throw TransportException::malformed($path, 'missing payment methods array');
-        }
+        $rawMethods = $this->allPages($path, 'payment_methods');
 
         $methods = [];
 
@@ -1163,12 +1151,57 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     }
 
     /**
+     * Read the complete collection from a fixed endpoint. Cursors are opaque data,
+     * never URLs; incomplete or looping responses must not look like complete lists.
+     *
+     * @return list<mixed>
+     */
+    private function allPages(string $path, string $collection): array
+    {
+        $rows = [];
+        $cursor = null;
+        $seen = [];
+
+        for ($page = 0; $page < 1000; $page++) {
+            $body = $this->get($path, $cursor === null ? [] : ['cursor' => $cursor]);
+            $items = $body[$collection] ?? $body['data'] ?? null;
+            if (! is_array($items) || ! array_is_list($items)) {
+                throw TransportException::malformed($path, 'missing collection array');
+            }
+            foreach ($items as $item) {
+                if (! is_array($item)) {
+                    throw TransportException::malformed($path, 'invalid collection item');
+                }
+                $rows[] = $item;
+            }
+
+            $hasMore = array_key_exists('has_more', $body) ? $body['has_more'] : false;
+            if (! is_bool($hasMore)) {
+                throw TransportException::malformed($path, 'invalid has_more flag');
+            }
+            if (! $hasMore) {
+                return $rows;
+            }
+            $cursor = $body['next_cursor'] ?? null;
+            if (! is_string($cursor) || trim($cursor) === '' || isset($seen[$cursor])) {
+                throw TransportException::malformed($path, 'missing or repeated pagination cursor');
+            }
+            $seen[$cursor] = true;
+        }
+
+        throw TransportException::malformed($path, 'pagination limit exceeded');
+    }
+
+    /**
+     * @param  array<string, string>  $query
      * @return array<string, mixed>
      */
-    private function get(string $path): array
+    private function get(string $path, array $query = []): array
     {
         try {
-            $response = $this->request()->get($this->url($path));
+            $response = $query === []
+                ? $this->request()->get($this->url($path))
+                : $this->request()->get($this->url($path), $query);
         } catch (ConnectionException $e) {
             throw TransportException::unreachable($path, $e);
         }

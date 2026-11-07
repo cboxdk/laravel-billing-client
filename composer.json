@@ -2,7 +2,15 @@
     "$schema": "https://getcomposer.org/schema.json",
     "name": "cboxdk/laravel-billing-client",
     "description": "Cbox Billing — app-local enforcement SDK: leases allowance from a remote Cbox Billing service and enforces hard limits locally on the hot path, buffering and reporting usage in the background.",
-    "keywords": ["cbox", "billing", "metering", "enforcement", "sdk", "client", "laravel"],
+    "keywords": [
+        "cbox",
+        "billing",
+        "metering",
+        "enforcement",
+        "sdk",
+        "client",
+        "laravel"
+    ],
     "type": "library",
     "license": "MIT",
     "require": {
@@ -35,7 +43,14 @@
         "test:contract": "pest --group=contract",
         "license-check": "@php bin/check-licenses.php",
         "sbom": "@php bin/generate-sbom.php",
-        "qa": ["@lint", "@analyse", "@test", "@test:contract", "@license-check", "@composer audit --no-dev"]
+        "qa": [
+            "@lint",
+            "@analyse",
+            "@test",
+            "@test:contract",
+            "@license-check",
+            "@composer audit --no-dev"
+        ]
     },
     "extra": {
         "laravel": {

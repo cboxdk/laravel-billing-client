@@ -6,6 +6,9 @@ namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BillingTransport;
 use Cbox\Billing\Client\Contracts\FeatureReader;
+use Cbox\Billing\Client\Contracts\FeatureTransport;
+use Cbox\Billing\Client\Enums\FeatureSource;
+use Cbox\Billing\Client\Enums\FeatureType;
 use Cbox\Billing\Client\Enums\ReserveOutcome;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
@@ -13,10 +16,11 @@ use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\CumulativeUsage;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\Entitlements;
+use Cbox\Billing\Client\ValueObjects\FeatureEntitlement;
+use Cbox\Billing\Client\ValueObjects\FeatureEntitlements;
 use Cbox\Billing\Client\ValueObjects\LeaseGrant;
 use Cbox\Billing\Client\ValueObjects\MeterActual;
 use Cbox\Billing\Client\ValueObjects\MeterEstimate;
-use Cbox\Billing\Client\ValueObjects\OrganizationFeatures;
 use Cbox\Billing\Client\ValueObjects\RemoteReservation;
 use DateTimeImmutable;
 use Illuminate\Http\Client\ConnectionException;
@@ -34,7 +38,7 @@ use Throwable;
  * the wire is validated and cast explicitly; a missing or wrong-typed field is a
  * malformed response, not a silent zero.
  */
-class HttpBillingTransport implements BillingTransport, FeatureReader
+class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -99,38 +103,6 @@ class HttpBillingTransport implements BillingTransport, FeatureReader
         ]);
     }
 
-    public function features(string $organization): OrganizationFeatures
-    {
-        $path = '/api/v1/entitlements/'.rawurlencode($organization).'/features';
-        $body = $this->get($path);
-        $account = $body['account'] ?? null;
-        $features = $body['features'] ?? null;
-        if (! is_array($features) || ! is_array($account) || ! is_bool($account['suspended'] ?? null)) {
-            throw TransportException::malformed($path, 'Invalid account or feature set.');
-        }
-
-        $grants = [];
-        foreach ($features as $key => $feature) {
-            if (! is_string($key) || ! is_array($feature) || ! is_bool($feature['enabled'] ?? null)) {
-                throw TransportException::malformed($path, 'Invalid feature grant.');
-            }
-            if (! $feature['enabled']) {
-                continue;
-            }
-            $type = $feature['type'] ?? null;
-            $value = $feature['value'] ?? null;
-            if ($type === 'boolean' && $value === null) {
-                $grants[$key] = true;
-            } elseif ($type === 'config' && (is_string($value) || is_int($value))) {
-                $grants[$key] = $value;
-            } else {
-                throw TransportException::malformed($path, 'Invalid feature type or value.');
-            }
-        }
-
-        return new OrganizationFeatures($account['suspended'], $grants);
-    }
-
     public function entitlements(string $org): Entitlements
     {
         $body = $this->get('/api/v1/entitlements/'.rawurlencode($org));
@@ -157,6 +129,37 @@ class HttpBillingTransport implements BillingTransport, FeatureReader
         }
 
         return new Entitlements($org, $meters);
+    }
+
+    public function features(string $organization): FeatureEntitlements
+    {
+        $org = $organization;
+        $path = '/api/v1/entitlements/'.rawurlencode($org).'/features';
+        $body = $this->get($path);
+        $raw = $body['features'] ?? null;
+        $account = $body['account'] ?? null;
+        if (! is_array($raw) || ! is_array($account) || ! is_bool($account['suspended'] ?? null)) {
+            throw TransportException::malformed($path, 'expected features and account suspension state');
+        }
+        $features = [];
+        foreach ($raw as $key => $row) {
+            if (! is_string($key) || $key === '' || ! is_array($row) || ! is_bool($row['enabled'] ?? null)
+                || ! array_key_exists('value', $row) || (array_key_exists('source', $row) && ! is_string($row['source']))
+                || ! is_string($row['type'] ?? null)) {
+                throw TransportException::malformed($path, 'invalid feature decision');
+            }
+            $type = FeatureType::tryFrom($row['type']);
+            $source = FeatureSource::tryFrom($row['source'] ?? 'default');
+            $value = $row['value'];
+            if ($type === null || $source === null || (! is_int($value) && ! is_string($value) && $value !== null)
+                || ($type === FeatureType::Boolean && $value !== null)
+                || ($type === FeatureType::Config && $row['enabled'] && $value === null)) {
+                throw TransportException::malformed($path, 'invalid feature value');
+            }
+            $features[$key] = new FeatureEntitlement($key, $type, $row['enabled'], $value, $source);
+        }
+
+        return new FeatureEntitlements($org, $features, $account['suspended']);
     }
 
     /**
@@ -202,6 +205,8 @@ class HttpBillingTransport implements BillingTransport, FeatureReader
             ->asJson()
             ->acceptJson()
             ->withToken($this->token)
+            ->withoutRedirecting()
+            ->connectTimeout(min(3, $this->timeout))
             ->timeout($this->timeout);
     }
 

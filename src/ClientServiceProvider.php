@@ -8,9 +8,11 @@ use Cbox\Billing\Client\Buffers\CacheUsageBuffer;
 use Cbox\Billing\Client\Buffers\DatabaseUsageBuffer;
 use Cbox\Billing\Client\Console\ReportUsageCommand;
 use Cbox\Billing\Client\Console\SweepReservationsCommand;
+use Cbox\Billing\Client\Console\SyncDefinitionsCommand;
 use Cbox\Billing\Client\Contracts\AllowanceSnapshots;
 use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\BillingTransport;
+use Cbox\Billing\Client\Contracts\DefinitionTransport;
 use Cbox\Billing\Client\Contracts\FeatureReader;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
@@ -18,6 +20,7 @@ use Cbox\Billing\Client\Contracts\ReservationRegistry;
 use Cbox\Billing\Client\Contracts\UsageBuffer;
 use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
+use Cbox\Billing\Client\Http\HttpDefinitionTransport;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Cbox\Billing\Client\Leasing\LeaseManager;
 use Cbox\Billing\Client\Leasing\ReservationSweeper;
@@ -50,6 +53,15 @@ class ClientServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/billing-client.php', 'billing-client');
 
+        $this->app->singleton(DefinitionTransport::class, static function (Application $app): HttpDefinitionTransport {
+            $config = $app->make(Config::class);
+
+            return new HttpDefinitionTransport(
+                $app->make(HttpFactory::class),
+                self::stringConfig($config, 'billing-client.base_url', ''),
+                self::stringConfig($config, 'billing-client.definition_token', ''),
+            );
+        });
         $this->registerSignals();
         $this->registerStores();
         $this->registerTransport();
@@ -202,7 +214,7 @@ class ClientServiceProvider extends ServiceProvider
                 __DIR__.'/../database/migrations' => $this->app->databasePath('migrations'),
             ], 'billing-client-migrations');
 
-            $this->commands([ReportUsageCommand::class, SweepReservationsCommand::class]);
+            $this->commands([ReportUsageCommand::class, SweepReservationsCommand::class, SyncDefinitionsCommand::class]);
         }
 
         // Auto-load the ledger migration only when the database buffer is in use, so a

@@ -3,6 +3,31 @@
 All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a minor
 release may change behaviour, and every such change is listed with an upgrade note.
 
+
+## [0.4.14] — prepared candidate, not published
+
+### Changes
+
+Publish definition catalogs automatically without assigning grants; expose typed live feature decisions and preserve OrganizationFeatures compatibility.
+
+Invoice and payment-method reads now consume every cursor page from the same endpoint. Malformed, repeated or excessive cursors fail explicitly instead of returning partial financial records.
+
+### Upgrade
+
+Configure definition publication credentials and run the SDK definition sync command during deployment. Publication creates or updates definitions only; entitlements and grants stay manual. Existing FeatureReader consumers retain value() and suspended behavior through the compatible base object.
+
+## Unreleased
+
+### Added
+
+- Read current feature entitlements through `BillingClient::features()` and the optional `FeatureTransport` contract, with typed values and a scriptable fake. Apps can enforce feature access against the exact Billing organization without treating local plan names as grants.
+
+- Preserve the published `FeatureReader` API alongside typed feature decisions through a shared snapshot, parser and fake state. Published resource limits, idempotent operations and contact phone remain available.
+
+### Security
+
+- Update development dependency locks and the production SBOM for patched Symfony components.
+
 ## 0.4.13 — 2026-11-06
 
 - Optional idempotent subscription and session operations, and organization feature

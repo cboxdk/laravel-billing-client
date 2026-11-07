@@ -20,6 +20,9 @@ return [
 
     'api_token' => env('BILLING_CLIENT_API_TOKEN'),
 
+    // Product-bound publisher credential with definitions:write only; no customer grants.
+    'definition_token' => env('BILLING_CLIENT_DEFINITION_TOKEN'),
+
     'timeout' => (int) env('BILLING_CLIENT_TIMEOUT', 5),
 
     /*

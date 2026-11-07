@@ -7,6 +7,7 @@ namespace Cbox\Billing\Client;
 use Cbox\Billing\Client\Contracts\AllowanceSnapshots;
 use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\BillingTransport;
+use Cbox\Billing\Client\Contracts\FeatureTransport;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Contracts\ReservationRegistry;
 use Cbox\Billing\Client\Contracts\UsageBuffer;
@@ -20,6 +21,7 @@ use Cbox\Billing\Client\Reporting\UsageReporter;
 use Cbox\Billing\Client\Signals\NullBillingSignals;
 use Cbox\Billing\Client\ValueObjects\BucketHold;
 use Cbox\Billing\Client\ValueObjects\Entitlements;
+use Cbox\Billing\Client\ValueObjects\FeatureEntitlements;
 use Cbox\Billing\Client\ValueObjects\MeterActual;
 use Cbox\Billing\Client\ValueObjects\MeterEstimate;
 use Cbox\Billing\Client\ValueObjects\RemoteReservation;
@@ -292,6 +294,16 @@ class BillingClient
         $this->snapshots?->remember($entitlements);
 
         return $entitlements;
+    }
+
+    /** Read current feature grants without lease failure-policy fallback or worker caching. */
+    public function features(string $org): FeatureEntitlements
+    {
+        if (! $this->transport instanceof FeatureTransport) {
+            throw new BillingUnavailable('The billing transport does not support feature entitlements.');
+        }
+
+        return $this->transport->features($org);
     }
 
     private function reserveOne(string $org, string $meter, int $estimate): Reservation

@@ -8,6 +8,9 @@ description: Task-oriented recipes for the self-service management flows — sub
 
 Practical, end-to-end recipes for the self-service [management client](../core-concepts/management-client.md).
 
+- [Publish product definitions](publish-definitions.md) — populate Billing's catalog from
+  the app repository while keeping plan and customer assignments manual.
+
 - [Subscribe, change & cancel](subscribe-change-cancel.md) — the plan lifecycle a
   product app exposes to its users, including previewing a change before applying it.
 - [Show usage](show-usage.md) — render the current period's per-meter usage and the
