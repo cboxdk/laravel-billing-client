@@ -7,7 +7,10 @@ use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\QuotaExceeded;
 use Cbox\Billing\Client\Jobs\RefillLease;
+use Cbox\Billing\Client\Leasing\OutageGrace;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
+use Illuminate\Cache\ArrayStore;
+use Illuminate\Cache\Repository;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Bus;
@@ -235,4 +238,19 @@ it('fails a container-wired empty slice fast while the breaker is open', functio
     }
 
     expect($calls)->toBe(2);
+});
+
+it('never revives an expired grace window when a late hold gives grace back', function (): void {
+    $store = new Repository(new ArrayStore);
+    $grace = new OutageGrace($store, 10, 60);
+
+    expect($grace->take('org_a', CALLS, 10))->toBeTrue();
+
+    $this->travel(61)->seconds();
+    $grace->giveBack('org_a', CALLS, 10);
+
+    expect($grace->remaining('org_a', CALLS))->toBe(10)
+        ->and($grace->take('org_a', CALLS, 11))->toBeFalse()
+        ->and($grace->take('org_a', CALLS, 10))->toBeTrue()
+        ->and($grace->remaining('org_a', CALLS))->toBe(0);
 });

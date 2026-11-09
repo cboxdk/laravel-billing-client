@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Leasing;
 
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Support\Carbon;
 
 /**
  * The small allowance a `last_known` client admits while Billing is unreachable and the last
@@ -59,11 +60,17 @@ class OutageGrace
         return true;
     }
 
-    /** Return grace a hold took but did not use. */
+    /**
+     * Return grace a hold took but did not use. Only into a window that still exists: a
+     * decrement on an expired key would recreate it without a TTL. A hold that outlived its
+     * window gives back nothing, which only errs towards less grace.
+     */
     public function giveBack(string $org, string $meter, int $units): void
     {
-        if ($units > 0) {
-            $this->cache->decrement($this->key($org, $meter), $units);
+        $key = $this->key($org, $meter);
+
+        if ($units > 0 && $this->cache->get($key) !== null) {
+            $this->cache->decrement($key, $units);
         }
     }
 
@@ -74,8 +81,11 @@ class OutageGrace
         return max(0, $this->limit($meter) - (is_numeric($used) ? (int) $used : 0));
     }
 
+    /** One key per window, so a counter that lost its TTL can never outlive its window. */
     private function key(string $org, string $meter): string
     {
-        return $this->prefix.$org.':'.$meter;
+        $window = max(1, $this->window);
+
+        return $this->prefix.$org.':'.$meter.':'.intdiv(Carbon::now()->getTimestamp(), $window);
     }
 }
