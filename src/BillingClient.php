@@ -182,7 +182,7 @@ class BillingClient
                         $this->store->giveBack($reservation->org, $bucket->meter, $bucket->amount);
                     }
                 } else {
-                    $this->returnOutageUnits($reservation->org, $bucket->meter, $bucket->amount, $bucket->grace);
+                    $this->returnOutageUnits($reservation->org, $bucket->meter, $bucket->amount, $bucket->graceWindow);
                 }
             }
 
@@ -191,7 +191,7 @@ class BillingClient
 
         if (! $reservation->backedByLease) {
             // An outage hold is not in the registry, so there is no close to own.
-            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount, $reservation->grace);
+            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount, $reservation->graceWindow);
 
             return;
         }
@@ -315,7 +315,7 @@ class BillingClient
         $hold = $this->holdBucket($org, $meter, $estimate);
         $id = ($this->ids)();
 
-        $reservation = new Reservation($id, $org, $meter, $hold->amount, $hold->backedByLease, $hold->grace);
+        $reservation = new Reservation($id, $org, $meter, $hold->amount, $hold->backedByLease, $hold->grace, $hold->graceWindow);
 
         if ($hold->backedByLease) {
             $this->registerHolds($id, $org, [$meter => $hold->amount]);
@@ -444,8 +444,10 @@ class BillingClient
             }
         }
 
-        if ($this->grace?->take($org, $meter, $estimate) === true) {
-            return new BucketHold($meter, $estimate, backedByLease: false, grace: true);
+        $window = $this->grace?->take($org, $meter, $estimate);
+
+        if ($window !== null) {
+            return new BucketHold($meter, $estimate, backedByLease: false, grace: true, graceWindow: $window);
         }
 
         if ($snapshots === null || $entitlement === null) {
@@ -481,14 +483,14 @@ class BillingClient
      * unbacked hold, against the last known allowance or, for a grace hold, against the
      * outage grace; under `allow` it took nothing from anywhere.
      */
-    private function returnOutageUnits(string $org, string $meter, int $units, bool $grace = false): void
+    private function returnOutageUnits(string $org, string $meter, int $units, ?int $graceWindow = null): void
     {
         if ($units <= 0 || ! $this->failurePolicy->enforcesLastKnown()) {
             return;
         }
 
-        if ($grace) {
-            $this->grace?->giveBack($org, $meter, $units);
+        if ($graceWindow !== null) {
+            $this->grace?->giveBack($org, $meter, $units, $graceWindow);
 
             return;
         }
@@ -506,7 +508,7 @@ class BillingClient
     {
         foreach ($held as $bucket) {
             if (! $bucket->backedByLease) {
-                $this->returnOutageUnits($org, $bucket->meter, $bucket->amount, $bucket->grace);
+                $this->returnOutageUnits($org, $bucket->meter, $bucket->amount, $bucket->graceWindow);
             } elseif ($bucket->amount > 0) {
                 $this->store->giveBack($org, $bucket->meter, $bucket->amount);
             }
@@ -524,7 +526,7 @@ class BillingClient
         if ($reservation->backedByLease) {
             $this->settleBucket($reservation->org, $reservation->meter, $reservation->amount, $actual, $owned);
         } else {
-            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount - $actual, $reservation->grace);
+            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount - $actual, $reservation->graceWindow);
         }
 
         if ($actual > 0) {
@@ -585,7 +587,7 @@ class BillingClient
             if ($bucket->backedByLease) {
                 $this->settleBucket($set->org, $bucket->meter, $bucket->amount, $actual, $owned);
             } elseif ($owned || $set->backedHolds() === []) {
-                $this->returnOutageUnits($set->org, $bucket->meter, $bucket->amount - $actual, $bucket->grace);
+                $this->returnOutageUnits($set->org, $bucket->meter, $bucket->amount - $actual, $bucket->graceWindow);
             }
 
             if ($actual > 0) {

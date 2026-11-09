@@ -244,13 +244,17 @@ it('never revives an expired grace window when a late hold gives grace back', fu
     $store = new Repository(new ArrayStore);
     $grace = new OutageGrace($store, 10, 60);
 
-    expect($grace->take('org_a', CALLS, 10))->toBeTrue();
+    $window = $grace->take('org_a', CALLS, 10);
+    expect($window)->toBeInt();
 
     $this->travel(61)->seconds();
-    $grace->giveBack('org_a', CALLS, 10);
 
-    expect($grace->remaining('org_a', CALLS))->toBe(10)
-        ->and($grace->take('org_a', CALLS, 11))->toBeFalse()
-        ->and($grace->take('org_a', CALLS, 10))->toBeTrue()
+    // Grace already taken in the new window is not credited by the old window's hold.
+    expect($grace->take('org_a', CALLS, 4))->toBeInt();
+    $grace->giveBack('org_a', CALLS, 10, $window);
+
+    expect($grace->remaining('org_a', CALLS))->toBe(6)
+        ->and($grace->take('org_a', CALLS, 7))->toBeNull()
+        ->and($grace->take('org_a', CALLS, 6))->toBeInt()
         ->and($grace->remaining('org_a', CALLS))->toBe(0);
 });

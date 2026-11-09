@@ -29,7 +29,7 @@ Pages no longer wait on Billing, and a Billing outage no longer takes them down.
 - **Outage grace** for `last_known` (`grace.units` 100 per organization and meter per
   `grace.window` 3600 s, `grace.meters` overrides): admitted when the last known allowance
   cannot cover a request, committed and reported like any usage. `Reservation::$grace` and
-  `BucketHold::$grace` mark such holds.
+  `BucketHold::$grace` mark such holds, and `$graceWindow` records the window unused grace returns to.
 - `connect_timeout` (2 s) and `lease_timeout` (2 s) settings; `queue.connection|name` for
   the background jobs.
 

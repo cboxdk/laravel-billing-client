@@ -20,5 +20,6 @@ readonly class BucketHold
         public int $amount,
         public bool $backedByLease = true,
         public bool $grace = false,
+        public ?int $graceWindow = null,
     ) {}
 }

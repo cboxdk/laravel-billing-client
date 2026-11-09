@@ -38,36 +38,40 @@ class OutageGrace
         return max(0, $this->meters[$meter] ?? $this->units);
     }
 
-    /** Take `$units` of grace; false (and nothing taken) when the window's grace is spent. */
-    public function take(string $org, string $meter, int $units): bool
+    /**
+     * Take `$units` of grace. Returns the window it was taken from (keep it with the hold, to
+     * give unused grace back to that same window), or null when the window's grace is spent.
+     */
+    public function take(string $org, string $meter, int $units): ?int
     {
         $limit = $this->limit($meter);
 
         if ($units <= 0 || $units > $limit) {
-            return false;
+            return null;
         }
 
-        $key = $this->key($org, $meter);
+        $window = $this->currentWindow();
+        $key = $this->key($org, $meter, $window);
         $this->cache->add($key, 0, max(1, $this->window));
         $used = $this->cache->increment($key, $units);
 
         if (! is_int($used) || $used > $limit) {
             $this->cache->decrement($key, $units);
 
-            return false;
+            return null;
         }
 
-        return true;
+        return $window;
     }
 
     /**
-     * Return grace a hold took but did not use. Only into a window that still exists: a
-     * decrement on an expired key would recreate it without a TTL. A hold that outlived its
-     * window gives back nothing, which only errs towards less grace.
+     * Return grace a hold took from `$window` but did not use. Only to that window, and only
+     * while it still exists: a decrement on an expired key would recreate it without a TTL.
+     * A hold that outlived its window gives back nothing.
      */
-    public function giveBack(string $org, string $meter, int $units): void
+    public function giveBack(string $org, string $meter, int $units, int $window): void
     {
-        $key = $this->key($org, $meter);
+        $key = $this->key($org, $meter, $window);
 
         if ($units > 0 && $this->cache->get($key) !== null) {
             $this->cache->decrement($key, $units);
@@ -76,16 +80,19 @@ class OutageGrace
 
     public function remaining(string $org, string $meter): int
     {
-        $used = $this->cache->get($this->key($org, $meter), 0);
+        $used = $this->cache->get($this->key($org, $meter, $this->currentWindow()), 0);
 
         return max(0, $this->limit($meter) - (is_numeric($used) ? (int) $used : 0));
     }
 
-    /** One key per window, so a counter that lost its TTL can never outlive its window. */
-    private function key(string $org, string $meter): string
+    private function currentWindow(): int
     {
-        $window = max(1, $this->window);
+        return intdiv(Carbon::now()->getTimestamp(), max(1, $this->window));
+    }
 
-        return $this->prefix.$org.':'.$meter.':'.intdiv(Carbon::now()->getTimestamp(), $window);
+    /** One key per window, so a counter that lost its TTL can never outlive its window. */
+    private function key(string $org, string $meter, int $window): string
+    {
+        return $this->prefix.$org.':'.$meter.':'.$window;
     }
 }
