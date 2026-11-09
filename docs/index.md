@@ -46,7 +46,11 @@ other drift is reporting lag, which the cumulative, self-correcting report close
   letting a product app's users browse plans, subscribe, change, cancel, and read usage
   and invoices.
 - Outage enforcement from the last known allowance (or explicit fail-open / fail-closed)
-  for the moment the SDK can neither lease locally nor reach billing.
+  for the moment the SDK can neither lease locally nor reach billing, with a small,
+  reported outage grace and a refill circuit breaker.
+- [Kept answers](core-concepts/kept-answers.md): the per-page admission check and the
+  subscription read answer from Billing's last answer and refresh it in the background,
+  so no page waits on Billing and none fails while it is down.
 
 ## Sections
 
@@ -55,7 +59,7 @@ other drift is reporting lag, which the cumulative, self-correcting report close
   enforcement, reservation recovery, cumulative reporting, the failure policy, the
   management client, and the architecture.
 - [Cookbook](cookbook/_index.md) — self-service recipes: subscribe, change & cancel,
-  and show usage.
+  show usage, and admission and plan reads that survive a Billing outage.
 
 > This package is the enforcement **client**. The metering authority, allowance
 > accounting, and ingest live in the deployable Cbox Billing service, which this SDK

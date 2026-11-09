@@ -40,7 +40,6 @@ use Cbox\Billing\Client\ValueObjects\OrganizationBundles;
 use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 use Cbox\Billing\Client\ValueObjects\PaymentIntent;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
-use Cbox\Billing\Client\ValueObjects\PendingChange;
 use Cbox\Billing\Client\ValueObjects\Plan;
 use Cbox\Billing\Client\ValueObjects\PortalSession;
 use Cbox\Billing\Client\ValueObjects\PreviewLine;
@@ -82,6 +81,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         private readonly string $baseUrl,
         private readonly string $token,
         private readonly int $timeout = 5,
+        private readonly int $connectTimeout = 2,
     ) {}
 
     public function plans(?string $currency = null): array
@@ -963,31 +963,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
      */
     private function toSubscription(array $raw, string $path): Subscription
     {
-        return new Subscription(
-            plan: $this->stringField($raw, 'plan', $path),
-            status: $this->stringOr($raw, 'status', 'active'),
-            periodStart: $this->date($raw['period_start'] ?? null),
-            periodEnd: $this->date($raw['period_end'] ?? null),
-            renewsAt: $this->date($raw['renews_at'] ?? null),
-            discount: $this->toDiscount($raw['discount'] ?? null, $path),
-            organizationRef: $this->nullableString($raw, 'organization_ref'),
-            pauseReason: $this->nullableString($raw, 'pause_reason'),
-            paused: ($raw['paused'] ?? false) === true,
-            trialEndsAt: $this->date($raw['trial_ends_at'] ?? null),
-            pendingChange: $this->toPendingChange($raw['pending_change'] ?? null),
-            bundle: BundlePayload::subscriptionBundle($raw['bundle'] ?? null, $path),
-            recurring: TaxPayload::recurring($raw['recurring'] ?? null),
-        );
-    }
-
-    /** A scheduled plan change, or null when none is scheduled (or the server predates it). */
-    private function toPendingChange(mixed $raw): ?PendingChange
-    {
-        if (! is_array($raw) || ! is_string($raw['plan'] ?? null)) {
-            return null;
-        }
-
-        return new PendingChange($raw['plan'], $this->date($raw['effective_at'] ?? null));
+        return SubscriptionPayload::subscription($raw, $path);
     }
 
     /**
@@ -1026,19 +1002,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
      */
     private function toDiscount(mixed $raw, string $path): ?SubscriptionDiscount
     {
-        if (! is_array($raw)) {
-            return null;
-        }
-
-        return new SubscriptionDiscount(
-            code: $this->stringField($raw, 'code', $path),
-            duration: $this->stringField($raw, 'duration', $path),
-            name: $this->nullableString($raw, 'name'),
-            percentOff: ($raw['percent_off'] ?? null) === null ? null : $this->intField($raw, 'percent_off', $path),
-            amountOffMinor: ($raw['amount_off_minor'] ?? null) === null ? null : $this->intField($raw, 'amount_off_minor', $path),
-            currency: $this->nullableString($raw, 'currency'),
-            endsAt: $this->date($raw['ends_at'] ?? null),
-        );
+        return SubscriptionPayload::discount($raw, $path);
     }
 
     /**
@@ -1263,7 +1227,8 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             ->asJson()
             ->acceptJson()
             ->withToken($this->token)
-            ->timeout($this->timeout);
+            ->connectTimeout(max(1, min($this->connectTimeout, $this->timeout)))
+            ->timeout(max(1, $this->timeout));
     }
 
     /**

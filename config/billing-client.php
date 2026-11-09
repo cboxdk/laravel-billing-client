@@ -25,6 +25,76 @@ return [
 
     'timeout' => (int) env('BILLING_CLIENT_TIMEOUT', 5),
 
+    // Seconds to establish the connection, on every call. A Billing host that does not
+    // answer at all fails this fast instead of holding a request for the full timeout.
+    'connect_timeout' => (int) env('BILLING_CLIENT_CONNECT_TIMEOUT', 2),
+
+    // The total timeout of a lease refill: the one call a request may still wait on (only
+    // when its local slice is empty), so it gives up sooner than other calls.
+    'lease_timeout' => (int) env('BILLING_CLIENT_LEASE_TIMEOUT', 2),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Kept answers (stale-while-revalidate)
+    |--------------------------------------------------------------------------
+    |
+    | Billing's answers to the questions a page asks (may this person use the service, what
+    | is this organization's subscription) are KEPT in the cache store with when they were
+    | asked, so no page waits on Billing and a Billing outage does not take pages down:
+    |
+    |   fresh_for — seconds an answer is used as is, by everyone.
+    |   max_age   — up to this age a safe request (GET, HEAD) is served the kept answer at
+    |               once and a background job asks again; past it, the request waits once.
+    |   keep_for  — how long an answer stays kept at all. While Billing is failing, a safe
+    |               request is served the last answer up to this age.
+    |
+    | A change (POST, PUT, PATCH, DELETE), `acting: true` and work outside a request never
+    | act on a stale answer. See docs/core-concepts/kept-answers.md.
+    |
+    */
+
+    'kept' => [
+        'fresh_for' => (int) env('BILLING_CLIENT_KEPT_FRESH_FOR', 30),
+        'max_age' => (int) env('BILLING_CLIENT_KEPT_MAX_AGE', 86_400),
+        'keep_for' => (int) env('BILLING_CLIENT_KEPT_KEEP_FOR', 604_800),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Background jobs
+    |--------------------------------------------------------------------------
+    |
+    | Where the refresh of a stale kept answer and the top-up of a low lease are queued.
+    | Null uses the app's default connection and queue. Use a real queue: on the `sync`
+    | connection the job runs inside the request that queued it.
+    |
+    */
+
+    'queue' => [
+        'connection' => env('BILLING_CLIENT_QUEUE_CONNECTION'),
+        'name' => env('BILLING_CLIENT_QUEUE'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Service access (admission)
+    |--------------------------------------------------------------------------
+    |
+    | The per-page "may this person use the service?" check
+    | (`POST /api/v1/access/services/{service}/check`), answered by
+    | Cbox\Billing\Client\Access\ServiceAccess from a kept answer. `service` is this app's
+    | service key in Billing. The token needs the `access:enroll` scope; the URL and token
+    | fall back to the CBOX_SERVICE_ACCESS_* variables apps already set, then to
+    | `base_url` and `api_token`.
+    |
+    */
+
+    'service_access' => [
+        'service' => env('BILLING_CLIENT_SERVICE'),
+        'url' => env('BILLING_CLIENT_ACCESS_URL', env('CBOX_SERVICE_ACCESS_URL')),
+        'token' => env('BILLING_CLIENT_ACCESS_TOKEN', env('CBOX_SERVICE_ACCESS_TOKEN')),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Lease sizing
@@ -41,6 +111,28 @@ return [
     'lease_size' => (int) env('BILLING_CLIENT_LEASE_SIZE', 100),
 
     'refill_threshold' => (int) env('BILLING_CLIENT_REFILL_THRESHOLD', 20),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Refill mode and circuit breaker
+    |--------------------------------------------------------------------------
+    |
+    | `refill` is how a lease at or below `refill_threshold` is topped up:
+    |
+    |   'queue' — the default: a unique background job tops it up and the request keeps
+    |             serving from the local slice. No request waits on Billing for a top-up.
+    |   'sync'  — inline in the request, as before 0.5.0.
+    |
+    | Only a slice too empty for the hold still refills inside the request, with the short
+    | `lease_timeout`. After such a refill finds Billing unreachable, the breaker stays open
+    | for `refill_breaker` seconds: no request tries Billing synchronously meanwhile, the
+    | failure policy (below) decides at once. 0 turns the breaker off.
+    |
+    */
+
+    'refill' => env('BILLING_CLIENT_REFILL', 'queue'),
+
+    'refill_breaker' => (int) env('BILLING_CLIENT_REFILL_BREAKER', 30),
 
     /*
     |--------------------------------------------------------------------------
@@ -116,6 +208,22 @@ return [
     */
 
     'fail' => env('BILLING_CLIENT_FAIL', 'last_known'),
+
+    /*
+    | Outage grace (`last_known` only). While Billing is unreachable and the last known
+    | allowance does not cover a request (the entitlement was never learned, or a capped
+    | meter has no headroom left in what the client last knew), admit up to `units` per
+    | (organization, meter) per `window` seconds instead of refusing. `meters` overrides
+    | `units` for one meter, e.g. ['storage.bytes' => 50_000_000]. 0 turns grace off. A
+    | meter Billing last said is disabled gets none. What grace admits is committed and
+    | reported like any usage, so Billing settles the overage once it is back.
+    */
+
+    'grace' => [
+        'units' => (int) env('BILLING_CLIENT_GRACE_UNITS', 100),
+        'window' => (int) env('BILLING_CLIENT_GRACE_WINDOW', 3600),
+        'meters' => [],
+    ],
 
     'snapshot_refresh' => (int) env('BILLING_CLIENT_SNAPSHOT_REFRESH', 300),
 

@@ -45,15 +45,21 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
         private readonly string $baseUrl,
         private readonly string $token,
         private readonly int $timeout = 5,
+        private readonly int $connectTimeout = 2,
+        private readonly ?int $leaseTimeout = null,
     ) {}
 
+    /**
+     * A lease refill uses its own, shorter `lease_timeout`: the one call a request may still
+     * wait on (when its local slice is empty), so it gives up quickly.
+     */
     public function lease(string $org, string $meter, int $size): LeaseGrant
     {
         $body = $this->post('/api/v1/leases', [
             'org' => $org,
             'meter' => $meter,
             'size' => $size,
-        ]);
+        ], $this->leaseTimeout);
 
         return new LeaseGrant(
             leaseId: $this->stringField($body, 'lease_id', '/api/v1/leases'),
@@ -166,10 +172,10 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    private function post(string $path, array $payload): array
+    private function post(string $path, array $payload, ?int $timeout = null): array
     {
         try {
-            $response = $this->request()->post($this->url($path), $payload);
+            $response = $this->request($timeout)->post($this->url($path), $payload);
         } catch (ConnectionException $e) {
             throw TransportException::unreachable($path, $e);
         }
@@ -199,15 +205,17 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
         return $this->decode($response->json(), $path);
     }
 
-    private function request(): PendingRequest
+    private function request(?int $timeout = null): PendingRequest
     {
+        $timeout = max(1, $timeout ?? $this->timeout);
+
         return $this->http
             ->asJson()
             ->acceptJson()
             ->withToken($this->token)
             ->withoutRedirecting()
-            ->connectTimeout(min(3, $this->timeout))
-            ->timeout($this->timeout);
+            ->connectTimeout(max(1, min($this->connectTimeout, $timeout)))
+            ->timeout($timeout);
     }
 
     /**

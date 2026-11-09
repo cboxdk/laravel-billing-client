@@ -4,6 +4,55 @@ All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a mi
 release may change behaviour, and every such change is listed with an upgrade note.
 
 
+## [0.5.0] - 2026-11-09
+
+Pages no longer wait on Billing, and a Billing outage no longer takes them down.
+
+### Added
+
+- **Kept answers** (stale-while-revalidate): `Contracts\KeptAnswers`, `Contracts\KeptQuestion`,
+  `Kept\CacheKeptAnswers` and the `RefreshKeptAnswer` job. An answer is fresh for
+  `kept.fresh_for` (30 s); a safe request is served a stale one at once and one refresh is
+  queued; a change, `acting: true` and work outside a request ask now; nothing kept or older
+  than `kept.max_age` (1 day) asks now; while Billing fails, a safe request is served the
+  last answer up to `kept.keep_for` (7 days). Only plain data is stored, validated on read.
+- **`Access\ServiceAccess`**: the per-page service-admission check
+  (`POST /api/v1/access/services/{service}/check`) as a kept answer: `allows()`,
+  `decision()`, `check()`, `remember()`, `forget()`, `forService()`. New
+  `Contracts\ServiceAccessTransport`, `Http\HttpServiceAccessTransport`,
+  `ValueObjects\AccessDecision` and `Testing\FakeServiceAccessTransport`. Config
+  `service_access.service|url|token` (`BILLING_CLIENT_SERVICE`, `BILLING_CLIENT_ACCESS_URL`,
+  `BILLING_CLIENT_ACCESS_TOKEN`, falling back to `CBOX_SERVICE_ACCESS_URL|TOKEN`).
+- **`Kept\KeptSubscriptions`**: the organization's subscription as a kept answer, the
+  primitive for an app's plan and limit reads. `Http\SubscriptionPayload` writes a
+  `Subscription` back in the wire shape.
+- **Outage grace** for `last_known` (`grace.units` 100 per organization and meter per
+  `grace.window` 3600 s, `grace.meters` overrides): admitted when the last known allowance
+  cannot cover a request, committed and reported like any usage. `Reservation::$grace` and
+  `BucketHold::$grace` mark such holds.
+- `connect_timeout` (2 s) and `lease_timeout` (2 s) settings; `queue.connection|name` for
+  the background jobs.
+
+### Changed
+
+- `LeaseManager::refillIfLow()` queues a unique `RefillLease` job instead of refilling inside
+  the request (`refill` = `queue`, the default; `sync` restores the old behaviour).
+- A synchronous refill that finds Billing unreachable opens a refill breaker for
+  `refill_breaker` seconds (30); meanwhile empty slices go straight to the failure policy.
+- Every HTTP call sets a connect timeout (the management and definition transports had none).
+- A top-up of a low but not empty slice no longer skips under the single-flight lock: it
+  asked for one unit, so the double-check found the slice "big enough" and never refilled.
+
+### Upgrade
+
+- Run a queue worker; on the `sync` queue the background jobs run inside the request.
+- Default wiring now admits up to 100 units of grace per (organization, meter) per hour
+  during an outage where it used to refuse. Set `BILLING_CLIENT_GRACE_UNITS=0` to keep the
+  old behaviour.
+- Replace the per-page admission call with `ServiceAccess::allows()` and the app's cached
+  subscription read with `KeptSubscriptions::subscription()`; see
+  `docs/cookbook/service-admission.md`.
+
 ## [0.4.14] - 2026-11-07
 
 ### Changes

@@ -17,6 +17,7 @@ use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\QuotaExceeded;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Leasing\LeaseManager;
+use Cbox\Billing\Client\Leasing\OutageGrace;
 use Cbox\Billing\Client\Reporting\UsageReporter;
 use Cbox\Billing\Client\Signals\NullBillingSignals;
 use Cbox\Billing\Client\ValueObjects\BucketHold;
@@ -62,7 +63,8 @@ use Throwable;
  *  - An UNREACHABLE billing service ({@see BillingUnavailable}: connection error, 5xx,
  *    429) is an INFRASTRUCTURE fault, resolved by the deployment's {@see FailurePolicy}:
  *    `last_known` admits up to the allowance the client last knew (from its
- *    {@see AllowanceSnapshots}) and refuses past it on a capped meter; `allow` admits
+ *    {@see AllowanceSnapshots}), then a small {@see OutageGrace}, and refuses past it on a
+ *    capped meter; `allow` admits
  *    everything; `deny` surfaces the error. Usage is buffered and reconciled later.
  *  - A REFUSAL ({@see BillingRefused}: a 4xx such as a revoked token) is a decision and
  *    always fails closed. Before 0.4.0 it was mistaken for an outage, so a revoked token
@@ -82,6 +84,7 @@ class BillingClient
      * @param  int  $reservationTtl  seconds a held reservation lives before the sweeper reclaims it
      * @param  (Closure(): int)|null  $clock  millisecond-epoch clock (deterministic in tests)
      * @param  AllowanceSnapshots|null  $snapshots  the last known allowance `last_known` enforces in an outage; without it, `last_known` refuses as `deny`
+     * @param  OutageGrace|null  $grace  the small allowance `last_known` admits in an outage beyond what it last knew; null admits none
      */
     public function __construct(
         private readonly LocalLeaseStore $store,
@@ -96,6 +99,7 @@ class BillingClient
         private readonly int $reservationTtl = 300,
         ?Closure $clock = null,
         private readonly ?AllowanceSnapshots $snapshots = null,
+        private readonly ?OutageGrace $grace = null,
     ) {
         $this->ids = $ids ?? static fn (): string => bin2hex(random_bytes(16));
         $this->clock = $clock ?? static fn (): int => (int) round(microtime(true) * 1000);
@@ -178,7 +182,7 @@ class BillingClient
                         $this->store->giveBack($reservation->org, $bucket->meter, $bucket->amount);
                     }
                 } else {
-                    $this->returnOutageUnits($reservation->org, $bucket->meter, $bucket->amount);
+                    $this->returnOutageUnits($reservation->org, $bucket->meter, $bucket->amount, $bucket->grace);
                 }
             }
 
@@ -187,7 +191,7 @@ class BillingClient
 
         if (! $reservation->backedByLease) {
             // An outage hold is not in the registry, so there is no close to own.
-            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount);
+            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount, $reservation->grace);
 
             return;
         }
@@ -311,7 +315,7 @@ class BillingClient
         $hold = $this->holdBucket($org, $meter, $estimate);
         $id = ($this->ids)();
 
-        $reservation = new Reservation($id, $org, $meter, $hold->amount, $hold->backedByLease);
+        $reservation = new Reservation($id, $org, $meter, $hold->amount, $hold->backedByLease, $hold->grace);
 
         if ($hold->backedByLease) {
             $this->registerHolds($id, $org, [$meter => $hold->amount]);
@@ -369,7 +373,8 @@ class BillingClient
      * throws {@see QuotaExceeded} (exhausted allowance), {@see BillingRefused} (billing
      * said no) or {@see BillingUnavailable} (unreachable, fail-closed) so a multi-meter
      * set can roll the whole thing back. Only an OUTAGE admitted by the policy (`allow`, or
-     * `last_known` within the known allowance) returns an unbacked hold; a refusal never does.
+     * `last_known` within the known allowance or its outage grace) returns an unbacked hold; a
+     * refusal never does.
      */
     private function holdBucket(string $org, string $meter, int $estimate): BucketHold
     {
@@ -413,27 +418,41 @@ class BillingClient
     }
 
     /**
-     * Billing is unreachable under `last_known`: admit from the last known entitlement.
-     * An unknown entitlement cannot be enforced, so the outage surfaces as under `deny`; a
-     * disabled meter, or a capped one with no headroom left, is refused as over quota.
+     * Billing is unreachable under `last_known`: admit from the last known entitlement. When
+     * that does not cover the hold (no entitlement was ever learned, or a capped meter has no
+     * headroom left in what the client last knew), the outage grace may admit it: a small,
+     * bounded allowance per window, still committed and reported for Billing to settle. A meter
+     * Billing last said is disabled is refused; so is the hold once grace is spent.
      *
-     * @throws BillingUnavailable when no entitlement is known for the meter
-     * @throws QuotaExceeded when the last known entitlement does not cover the hold
+     * @throws BillingUnavailable when no entitlement is known for the meter and grace is spent
+     * @throws QuotaExceeded when the last known entitlement does not cover the hold and grace is spent
      */
     private function holdFromLastKnown(string $org, string $meter, int $estimate, BillingUnavailable $outage): BucketHold
     {
         $snapshots = $this->snapshots;
         $entitlement = $snapshots?->entitlement($org, $meter);
 
+        if ($snapshots !== null && $entitlement !== null) {
+            if ($snapshots->admit($org, $meter, $estimate)) {
+                return new BucketHold($meter, $estimate, backedByLease: false);
+            }
+
+            if (! $entitlement->enabled) {
+                $this->signals->denied($org, $meter, $estimate, 'quota_exhausted');
+
+                throw new QuotaExceeded($org, $meter, $estimate);
+            }
+        }
+
+        if ($this->grace?->take($org, $meter, $estimate) === true) {
+            return new BucketHold($meter, $estimate, backedByLease: false, grace: true);
+        }
+
         if ($snapshots === null || $entitlement === null) {
             throw $outage;
         }
 
-        if ($snapshots->admit($org, $meter, $estimate)) {
-            return new BucketHold($meter, $estimate, backedByLease: false);
-        }
-
-        $this->signals->denied($org, $meter, $estimate, $entitlement->enabled ? 'outage_limit' : 'quota_exhausted');
+        $this->signals->denied($org, $meter, $estimate, 'outage_limit');
 
         throw new QuotaExceeded($org, $meter, $estimate);
     }
@@ -444,22 +463,37 @@ class BillingClient
         $snapshots = $this->snapshots;
         $entitlement = $snapshots?->entitlement($org, $meter);
 
-        if ($snapshots === null || $entitlement === null || ! $entitlement->enabled) {
-            return false;
+        if ($snapshots !== null && $entitlement !== null) {
+            if (! $entitlement->enabled) {
+                return false;
+            }
+
+            if (! $entitlement->isCapped() || $snapshots->headroom($org, $meter) >= $n) {
+                return true;
+            }
         }
 
-        return ! $entitlement->isCapped() || $snapshots->headroom($org, $meter) >= $n;
+        return $this->grace !== null && $this->grace->remaining($org, $meter) >= $n;
     }
 
     /**
      * Give back outage units a hold counted but did not use. Only `last_known` counts an
-     * unbacked hold; under `allow` it took nothing from anywhere.
+     * unbacked hold, against the last known allowance or, for a grace hold, against the
+     * outage grace; under `allow` it took nothing from anywhere.
      */
-    private function returnOutageUnits(string $org, string $meter, int $units): void
+    private function returnOutageUnits(string $org, string $meter, int $units, bool $grace = false): void
     {
-        if ($units > 0 && $this->failurePolicy->enforcesLastKnown()) {
-            $this->snapshots?->giveBack($org, $meter, $units);
+        if ($units <= 0 || ! $this->failurePolicy->enforcesLastKnown()) {
+            return;
         }
+
+        if ($grace) {
+            $this->grace?->giveBack($org, $meter, $units);
+
+            return;
+        }
+
+        $this->snapshots?->giveBack($org, $meter, $units);
     }
 
     /**
@@ -472,7 +506,7 @@ class BillingClient
     {
         foreach ($held as $bucket) {
             if (! $bucket->backedByLease) {
-                $this->returnOutageUnits($org, $bucket->meter, $bucket->amount);
+                $this->returnOutageUnits($org, $bucket->meter, $bucket->amount, $bucket->grace);
             } elseif ($bucket->amount > 0) {
                 $this->store->giveBack($org, $bucket->meter, $bucket->amount);
             }
@@ -490,7 +524,7 @@ class BillingClient
         if ($reservation->backedByLease) {
             $this->settleBucket($reservation->org, $reservation->meter, $reservation->amount, $actual, $owned);
         } else {
-            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount - $actual);
+            $this->returnOutageUnits($reservation->org, $reservation->meter, $reservation->amount - $actual, $reservation->grace);
         }
 
         if ($actual > 0) {
@@ -551,7 +585,7 @@ class BillingClient
             if ($bucket->backedByLease) {
                 $this->settleBucket($set->org, $bucket->meter, $bucket->amount, $actual, $owned);
             } elseif ($owned || $set->backedHolds() === []) {
-                $this->returnOutageUnits($set->org, $bucket->meter, $bucket->amount - $actual);
+                $this->returnOutageUnits($set->org, $bucket->meter, $bucket->amount - $actual, $bucket->grace);
             }
 
             if ($actual > 0) {

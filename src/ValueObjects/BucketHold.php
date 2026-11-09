@@ -19,5 +19,6 @@ readonly class BucketHold
         public string $meter,
         public int $amount,
         public bool $backedByLease = true,
+        public bool $grace = false,
     ) {}
 }

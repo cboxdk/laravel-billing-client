@@ -110,6 +110,41 @@ it('stops at the allowance while billing is down', function () {
 
 `$this->allowanceSnapshots()` returns the store that client enforces from.
 
+## Testing production's refill and grace (0.5.0)
+
+`makeBillingClient()` refills inline by default. Build it as production wires it:
+
+- `queuedRefills: true` queues a low lease's top-up instead of making it. `queuedRefills()`
+  lists what was queued, and `runQueuedRefills()` runs it as the `RefillLease` job would.
+- `breakerCooldown: 30` opens the refill breaker after Billing was found unreachable.
+- `graceUnits: 100` (with `FailurePolicy::LastKnown`) gives the outage grace.
+
+```php
+$client = $this->makeBillingClient(failurePolicy: FailurePolicy::LastKnown, queuedRefills: true, graceUnits: 50);
+$this->transport()->takeDown();
+
+expect($client->reserve('org_new', 'api.calls', 20)->grace)->toBeTrue();
+```
+
+## Testing admission
+
+`FakeServiceAccessTransport` answers the service-access check. Script who is let in with
+`allow($subject, $organization)` and `refuse($subject, $organization, $reason)`; everyone
+else is refused with `not_admitted`. It has `takeDown()`, `refuseWith()`, and `checks()`,
+the number of checks that reached it. Bind it in the container, so `ServiceAccess` uses it:
+
+```php
+$this->app->instance(ServiceAccessTransport::class, $fake = new FakeServiceAccessTransport);
+$fake->allow('usr_1', 'org_1');
+
+expect(app(ServiceAccess::class)->allows('usr_1', 'org_1'))->toBeTrue();
+```
+
+Kept answers read the request method from the bound `request`; set
+`app()->instance('request', Request::create('/x', 'POST'))` to test a change, and
+`$this->travel(31)->seconds()` to make an answer stale. See
+[Kept answers](../core-concepts/kept-answers.md).
+
 ## Deterministic ids
 
 `makeBillingClient()` injects a deterministic reservation-id factory, so buffered and

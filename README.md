@@ -118,6 +118,18 @@ Failure handling splits by cause:
   refuses past it on a hard-limit meter; `allow` admits everything; `deny` refuses once
   the local lease is spent. Usage is buffered and reconciled later under every policy.
 
+### Nothing waits on Billing
+
+- **Kept answers.** The per-page admission check (`ServiceAccess::allows()`) and the
+  subscription read (`KeptSubscriptions::subscription()`) answer from Billing's last
+  answer, kept in the cache store, and refresh it in a background job. Pages render while
+  Billing is down. See [Kept answers](docs/core-concepts/kept-answers.md) and the
+  [cookbook recipe](docs/cookbook/service-admission.md).
+- **Queued top-ups.** A low lease is topped up by a queued job, not inside the request.
+  Only an empty slice refills inline, with a short timeout and a circuit breaker; while
+  the breaker is open, the failure policy and its small outage grace decide at once.
+- **Connect timeouts** on every call.
+
 ### More enforcement hardening
 
 - **Reservation TTL recovery.** A held reservation a crashed request never settles is
