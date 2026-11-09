@@ -12,6 +12,8 @@ use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Leasing\LeaseManager;
+use Cbox\Billing\Client\Leasing\OutageGrace;
+use Cbox\Billing\Client\Leasing\RefillBreaker;
 use Cbox\Billing\Client\Leasing\ReservationSweeper;
 use Cbox\Billing\Client\Reporting\UsageReporter;
 use Cbox\Billing\Client\Signals\NullBillingSignals;
@@ -35,6 +37,11 @@ use Illuminate\Cache\Repository;
  * `$this->billingNowMs` to drive the reservation-TTL clock, and use `$this->sweeper()`
  * to reclaim abandoned holds. `$this->makeBillingManagement()` builds the self-service
  * client over {@see FakeManagementTransport}.
+ *
+ * Since 0.5.0 the client can be built as production wires it: `queuedRefills: true` queues a
+ * low lease's top-up instead of refilling inline (run the queue with
+ * `$this->runQueuedRefills()`), `breakerCooldown` opens the refill breaker after Billing was
+ * found unreachable, and `graceUnits` gives `last_known` its outage grace.
  */
 trait InteractsWithBillingClient
 {
@@ -58,6 +65,11 @@ trait InteractsWithBillingClient
     private int $reservationIdSeq = 0;
 
     private int $billingReservationTtl = 300;
+
+    private ?LeaseManager $billingLeases = null;
+
+    /** @var list<array{0: string, 1: string}> */
+    private array $billingQueuedRefills = [];
 
     protected function transport(): FakeBillingTransport
     {
@@ -109,6 +121,10 @@ trait InteractsWithBillingClient
         ?LocalLeaseStore $store = null,
         FailurePolicy $failurePolicy = FailurePolicy::Allow,
         int $reservationTtl = 300,
+        bool $queuedRefills = false,
+        int $breakerCooldown = 0,
+        int $graceUnits = 0,
+        int $graceWindow = 3600,
     ): BillingClient {
         $locks = null;
 
@@ -126,7 +142,23 @@ trait InteractsWithBillingClient
         $transport = $this->transport();
         $buffer = $this->usageBuffer();
 
-        $leases = new LeaseManager($transport, $store, $leaseSize, $refillThreshold, $locks, signals: $this->signals(), snapshots: $snapshots);
+        $local = new Repository(new ArrayStore);
+        $queue = $queuedRefills
+            ? function (string $org, string $meter): void {
+                if (! in_array([$org, $meter], $this->billingQueuedRefills, true)) {
+                    $this->billingQueuedRefills[] = [$org, $meter];
+                }
+            }
+        : null;
+
+        $leases = new LeaseManager(
+            $transport, $store, $leaseSize, $refillThreshold, $locks,
+            signals: $this->signals(),
+            snapshots: $snapshots,
+            queueRefill: $queue,
+            breaker: $breakerCooldown > 0 ? new RefillBreaker($local, $breakerCooldown) : null,
+        );
+        $this->billingLeases = $leases;
         $reporter = new UsageReporter($transport, $buffer, $this->signals());
 
         return new BillingClient(
@@ -142,7 +174,32 @@ trait InteractsWithBillingClient
             reservationTtl: $reservationTtl,
             clock: fn (): int => $this->billingNowMs > 0 ? $this->billingNowMs : (int) round(microtime(true) * 1000),
             snapshots: $snapshots,
+            grace: $failurePolicy->enforcesLastKnown() && $graceUnits > 0 ? new OutageGrace($local, $graceUnits, $graceWindow) : null,
         );
+    }
+
+    /**
+     * The top-ups a `queuedRefills: true` client queued and not yet ran, as [org, meter].
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    protected function queuedRefills(): array
+    {
+        return $this->billingQueuedRefills;
+    }
+
+    /** Run the queued top-ups as the background job would, swallowing nothing. Returns units granted. */
+    protected function runQueuedRefills(): int
+    {
+        $granted = 0;
+        $queued = $this->billingQueuedRefills;
+        $this->billingQueuedRefills = [];
+
+        foreach ($queued as [$org, $meter]) {
+            $granted += $this->billingLeases?->refillInBackground($org, $meter) ?? 0;
+        }
+
+        return $granted;
     }
 
     /** A sweeper over the same store and registry the last {@see makeBillingClient()} used. */

@@ -168,11 +168,15 @@ it('wires last_known through the container by default', function (): void {
     $down = true;
 
     // 200 leased of 400 (the slice was topped up), 100 of it unspent: spend the slice,
-    // then the 200 the last known allowance still covers, then nothing.
+    // then the 200 the last known allowance still covers, then the default outage grace
+    // of 100, then nothing.
     $client->commit($client->reserve('org_free', SPANS, 100), 100);
     $client->commit($client->reserve('org_free', SPANS, 200), 200);
+    $grace = $client->reserve('org_free', SPANS, 100);
+    $client->commit($grace, 100);
 
-    expect(fn () => $client->reserve('org_free', SPANS, 1))->toThrow(QuotaExceeded::class);
+    expect($grace->grace)->toBeTrue()
+        ->and(fn () => $client->reserve('org_free', SPANS, 1))->toThrow(QuotaExceeded::class);
 });
 
 it('gives back unused outage headroom on release and on a smaller commit', function (): void {

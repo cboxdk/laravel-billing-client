@@ -14,7 +14,7 @@ use Throwable;
 
 final readonly class HttpDefinitionTransport implements DefinitionTransport
 {
-    public function __construct(private Factory $http, private string $baseUrl, private string $token, private int $timeout = 10) {}
+    public function __construct(private Factory $http, private string $baseUrl, private string $token, private int $timeout = 10, private int $connectTimeout = 2) {}
 
     public function sync(DefinitionManifest $manifest): void
     {
@@ -29,7 +29,8 @@ final readonly class HttpDefinitionTransport implements DefinitionTransport
         }
         $body = $manifest->toArray();
         try {
-            $response = $this->http->acceptJson()->withToken($this->token)->withoutRedirecting()->timeout($this->timeout)
+            $response = $this->http->acceptJson()->withToken($this->token)->withoutRedirecting()
+                ->connectTimeout(max(1, min($this->connectTimeout, $this->timeout)))->timeout(max(1, $this->timeout))
                 ->put($url, $body);
         } catch (Throwable) {
             throw new BillingUnavailable('Definition synchronization could not reach Billing.');

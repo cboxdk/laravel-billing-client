@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client;
 
+use Cbox\Billing\Client\Access\ServiceAccess;
 use Cbox\Billing\Client\Buffers\CacheUsageBuffer;
 use Cbox\Billing\Client\Buffers\DatabaseUsageBuffer;
 use Cbox\Billing\Client\Console\ReportUsageCommand;
@@ -14,21 +15,31 @@ use Cbox\Billing\Client\Contracts\BillingSignals;
 use Cbox\Billing\Client\Contracts\BillingTransport;
 use Cbox\Billing\Client\Contracts\DefinitionTransport;
 use Cbox\Billing\Client\Contracts\FeatureReader;
+use Cbox\Billing\Client\Contracts\KeptAnswers;
 use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\ReservationRegistry;
+use Cbox\Billing\Client\Contracts\ServiceAccessTransport;
 use Cbox\Billing\Client\Contracts\UsageBuffer;
 use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\Http\HttpDefinitionTransport;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
+use Cbox\Billing\Client\Http\HttpServiceAccessTransport;
+use Cbox\Billing\Client\Jobs\RefillLease;
+use Cbox\Billing\Client\Kept\CacheKeptAnswers;
+use Cbox\Billing\Client\Kept\CurrentRequest;
+use Cbox\Billing\Client\Kept\KeptSubscriptions;
 use Cbox\Billing\Client\Leasing\LeaseManager;
+use Cbox\Billing\Client\Leasing\OutageGrace;
+use Cbox\Billing\Client\Leasing\RefillBreaker;
 use Cbox\Billing\Client\Leasing\ReservationSweeper;
 use Cbox\Billing\Client\Reporting\UsageReporter;
 use Cbox\Billing\Client\Signals\NullBillingSignals;
 use Cbox\Billing\Client\Stores\CacheAllowanceSnapshots;
 use Cbox\Billing\Client\Stores\CacheLeaseStore;
 use Cbox\Billing\Client\Stores\CacheReservationRegistry;
+use Cbox\Billing\Client\Support\BackgroundJobs;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
@@ -60,6 +71,7 @@ class ClientServiceProvider extends ServiceProvider
                 $app->make(HttpFactory::class),
                 self::stringConfig($config, 'billing-client.base_url', ''),
                 self::stringConfig($config, 'billing-client.definition_token', ''),
+                connectTimeout: self::intConfig($config, 'billing-client.connect_timeout', 2),
             );
         });
         $this->registerSignals();
@@ -67,6 +79,66 @@ class ClientServiceProvider extends ServiceProvider
         $this->registerTransport();
         $this->registerServices();
         $this->registerManagement();
+        $this->registerKeptAnswers();
+    }
+
+    /**
+     * Kept answers (stale-while-revalidate), the background jobs that refresh them, and the
+     * two readers built on them: service access and the organization's subscription.
+     */
+    private function registerKeptAnswers(): void
+    {
+        $this->app->singleton(BackgroundJobs::class, static function (Application $app): BackgroundJobs {
+            $config = $app->make(Config::class);
+            $prefix = self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client');
+
+            return new BackgroundJobs(
+                $app,
+                self::cache($app, $config),
+                $prefix.':claim:',
+                self::nullableStringConfig($config, 'billing-client.queue.connection'),
+                self::nullableStringConfig($config, 'billing-client.queue.name'),
+            );
+        });
+
+        $this->app->singleton(CurrentRequest::class, static fn (Application $app): CurrentRequest => new CurrentRequest($app));
+
+        $this->app->singleton(KeptAnswers::class, static function (Application $app): CacheKeptAnswers {
+            $config = $app->make(Config::class);
+            $prefix = self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client');
+
+            return new CacheKeptAnswers(
+                $app,
+                self::cache($app, $config),
+                $app->make(CurrentRequest::class),
+                $app->make(BackgroundJobs::class),
+                self::intConfig($config, 'billing-client.kept.fresh_for', 30),
+                self::intConfig($config, 'billing-client.kept.max_age', 86_400),
+                self::intConfig($config, 'billing-client.kept.keep_for', 604_800),
+                $prefix.':kept:',
+            );
+        });
+
+        $this->app->singleton(ServiceAccessTransport::class, static function (Application $app): HttpServiceAccessTransport {
+            $config = $app->make(Config::class);
+
+            return new HttpServiceAccessTransport(
+                $app->make(HttpFactory::class),
+                self::nullableStringConfig($config, 'billing-client.service_access.url') ?? self::stringConfig($config, 'billing-client.base_url', ''),
+                self::nullableStringConfig($config, 'billing-client.service_access.token') ?? self::stringConfig($config, 'billing-client.api_token', ''),
+                self::intConfig($config, 'billing-client.timeout', 5),
+                self::intConfig($config, 'billing-client.connect_timeout', 2),
+            );
+        });
+
+        $this->app->singleton(ServiceAccess::class, static fn (Application $app): ServiceAccess => new ServiceAccess(
+            $app->make(KeptAnswers::class),
+            self::stringConfig($app->make(Config::class), 'billing-client.service_access.service', ''),
+        ));
+
+        $this->app->singleton(KeptSubscriptions::class, static fn (Application $app): KeptSubscriptions => new KeptSubscriptions(
+            $app->make(KeptAnswers::class),
+        ));
     }
 
     private function registerSignals(): void
@@ -129,6 +201,8 @@ class ClientServiceProvider extends ServiceProvider
                 self::stringConfig($config, 'billing-client.base_url', ''),
                 self::stringConfig($config, 'billing-client.api_token', ''),
                 self::intConfig($config, 'billing-client.timeout', 5),
+                self::intConfig($config, 'billing-client.connect_timeout', 2),
+                self::intConfig($config, 'billing-client.lease_timeout', 2),
             );
         });
     }
@@ -148,6 +222,16 @@ class ClientServiceProvider extends ServiceProvider
                 self::intConfig($config, 'billing-client.refill_lock_wait', 5),
                 $app->make(BillingSignals::class),
                 snapshots: self::snapshotsFor($app, $config),
+                queueRefill: self::stringConfig($config, 'billing-client.refill', 'queue') === 'sync'
+                    ? null
+                    : static function (string $org, string $meter) use ($app): void {
+                        $app->make(BackgroundJobs::class)->dispatchOnce(RefillLease::claim($org, $meter), new RefillLease($org, $meter), RefillLease::UNIQUE_FOR);
+                    },
+                breaker: new RefillBreaker(
+                    self::cache($app, $config),
+                    self::intConfig($config, 'billing-client.refill_breaker', 30),
+                    self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client').':refill-breaker',
+                ),
             );
         });
 
@@ -177,6 +261,7 @@ class ClientServiceProvider extends ServiceProvider
                 signals: $app->make(BillingSignals::class),
                 reservationTtl: self::intConfig($config, 'billing-client.reservation_ttl', 300),
                 snapshots: self::snapshotsFor($app, $config),
+                grace: self::graceFor($app, $config),
             );
         });
 
@@ -193,6 +278,7 @@ class ClientServiceProvider extends ServiceProvider
                 self::stringConfig($config, 'billing-client.base_url', ''),
                 self::stringConfig($config, 'billing-client.api_token', ''),
                 self::intConfig($config, 'billing-client.timeout', 5),
+                self::intConfig($config, 'billing-client.connect_timeout', 2),
             );
         });
 
@@ -232,6 +318,31 @@ class ClientServiceProvider extends ServiceProvider
         return FailurePolicy::fromConfig($config->get('billing-client.fail'))->enforcesLastKnown()
             ? $app->make(AllowanceSnapshots::class)
             : null;
+    }
+
+    /** The outage grace, wired only when the failure policy enforces the last known allowance. */
+    private static function graceFor(Application $app, Config $config): ?OutageGrace
+    {
+        if (! FailurePolicy::fromConfig($config->get('billing-client.fail'))->enforcesLastKnown()) {
+            return null;
+        }
+
+        $meters = [];
+        $configured = $config->get('billing-client.grace.meters');
+
+        foreach (is_array($configured) ? $configured : [] as $meter => $units) {
+            if (is_string($meter) && (is_int($units) || (is_string($units) && is_numeric($units)))) {
+                $meters[$meter] = (int) $units;
+            }
+        }
+
+        return new OutageGrace(
+            self::cache($app, $config),
+            self::intConfig($config, 'billing-client.grace.units', 100),
+            self::intConfig($config, 'billing-client.grace.window', 3600),
+            $meters,
+            self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client').':grace:',
+        );
     }
 
     private static function cache(Application $app, Config $config): CacheRepository

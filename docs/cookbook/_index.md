@@ -23,3 +23,5 @@ Practical, end-to-end recipes for the self-service [management client](../core-c
 - [Show bundles and cancel consequences](show-bundles.md) — show a cross-product bundle
   benefit, offer what the organization could add to save, and warn before a cancel that ends a
   benefit elsewhere.
+- [Admission and plan reads that survive a Billing outage](service-admission.md) — replace the
+  per-page service-access check and the plan read with kept answers.
