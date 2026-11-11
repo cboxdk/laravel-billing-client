@@ -15,11 +15,11 @@ component that touches the network is the transport.
 
 | Method | Endpoint |
 | --- | --- |
-| `lease($org, $meter, $size)` | `POST /api/v1/leases` |
-| `reportUsage($org, $entries)` | `POST /api/v1/usage` |
-| `reserve($org, $meters)` | `POST /api/v1/reserve` |
-| `commit($reservationId, $actuals)` | `POST /api/v1/commit` |
-| `entitlements($org)` | `GET /api/v1/entitlements/{org}` |
+| `lease($org, $meter, $size)` | `POST /v1/leases` |
+| `reportUsage($org, $entries)` | `POST /v1/usage` |
+| `reserve($org, $meters)` | `POST /v1/reserve` |
+| `commit($reservationId, $actuals)` | `POST /v1/commit` |
+| `entitlements($org)` | `GET /v1/entitlements/{org}` |
 
 `Http\HttpBillingTransport` speaks real HTTP with a bearer token and is
 **deny-by-default** about responses: any non-2xx, connection error, or malformed body

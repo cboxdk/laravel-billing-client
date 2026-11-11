@@ -97,19 +97,19 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             'country' => $country !== null && $country !== '' ? strtoupper($country) : null,
         ], static fn (?string $value): bool => $value !== null);
         $query = $params === [] ? '' : '?'.http_build_query($params, '', '&', PHP_QUERY_RFC3986);
-        $body = $this->get('/api/v1/plans'.$query);
+        $body = $this->get('/plans'.$query);
 
         $rawPlans = $body['plans'] ?? $body['data'] ?? null;
 
         if (! is_array($rawPlans)) {
-            throw TransportException::malformed('/api/v1/plans', 'missing plans array');
+            throw TransportException::malformed('/plans', 'missing plans array');
         }
 
         $plans = [];
 
         foreach ($rawPlans as $raw) {
             if (! is_array($raw)) {
-                throw TransportException::malformed('/api/v1/plans', 'invalid plan row');
+                throw TransportException::malformed('/plans', 'invalid plan row');
             }
             $plans[] = $this->toPlan($raw);
         }
@@ -128,7 +128,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     public function subscription(string $org): ?Subscription
     {
         try {
-            $body = $this->get('/api/v1/subscriptions/'.rawurlencode($org));
+            $body = $this->get('/subscriptions/'.rawurlencode($org));
         } catch (BillingRefused $e) {
             if ($e->status === 404 && $this->isControllerNotFound($e->body)) {
                 return null;
@@ -143,17 +143,17 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             return null;
         }
 
-        return $this->toSubscription($raw, '/api/v1/subscriptions/{org}');
+        return $this->toSubscription($raw, '/subscriptions/{org}');
     }
 
     public function ensureOrganization(string $org, array $attributes): void
     {
-        $this->putDiscardingBody('/api/v1/organizations/'.rawurlencode($org), $attributes);
+        $this->putDiscardingBody('/organizations/'.rawurlencode($org), $attributes);
     }
 
     public function upsertOrganization(string $org, array $attributes): OrganizationProfile
     {
-        $path = '/api/v1/organizations/'.rawurlencode($org);
+        $path = '/organizations/'.rawurlencode($org);
 
         try {
             $response = $this->request()->put($this->url($path), $attributes);
@@ -176,7 +176,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         $validated = $raw['tax_id_validated'] ?? null;
 
         return new OrganizationProfile(
-            id: $this->stringField($raw, 'id', $path),
+            id: $this->idField($raw, 'id', $path),
             externalRef: $text('external_ref'),
             name: $this->stringOr($raw, 'name', ''),
             billingEmail: $text('billing_email'),
@@ -201,25 +201,25 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function subscribe(string $org, string $plan, ?string $idempotencyKey = null): SubscriptionResult
     {
-        $body = $this->postWithHeaders('/api/v1/subscriptions', ['org' => $org, 'plan' => $plan], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]);
+        $body = $this->postWithHeaders('/subscriptions', ['org' => $org, 'plan' => $plan], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]);
 
         $rawSubscription = $body['subscription'] ?? null;
 
         if (! is_array($rawSubscription)) {
-            throw TransportException::malformed('/api/v1/subscriptions', 'missing subscription object');
+            throw TransportException::malformed('/subscriptions', 'missing subscription object');
         }
 
         $rawIntent = $body['payment_intent'] ?? null;
 
         return new SubscriptionResult(
-            $this->toSubscription($rawSubscription, '/api/v1/subscriptions'),
+            $this->toSubscription($rawSubscription, '/subscriptions'),
             is_array($rawIntent) ? $this->toPaymentIntent($rawIntent) : null,
         );
     }
 
     public function previewChange(string $org, string $plan): ChangePreview
     {
-        $path = '/api/v1/subscriptions/'.rawurlencode($org).'/preview';
+        $path = '/subscriptions/'.rawurlencode($org).'/preview';
 
         return $this->toChangePreview($this->post($path, ['plan' => $plan]), $path);
     }
@@ -275,7 +275,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
      */
     public function changePlan(string $org, string $plan, ?string $idempotencyKey = null): ChangePreview
     {
-        $path = '/api/v1/subscriptions/'.rawurlencode($org).'/change';
+        $path = '/subscriptions/'.rawurlencode($org).'/change';
 
         return $this->toChangePreview($this->postWithHeaders($path, ['plan' => $plan], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]), $path);
     }
@@ -286,18 +286,18 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
      */
     public function cancel(string $org, bool $atPeriodEnd, ?string $idempotencyKey = null): Subscription
     {
-        $path = '/api/v1/subscriptions/'.rawurlencode($org).'/cancel';
+        $path = '/subscriptions/'.rawurlencode($org).'/cancel';
 
         return $this->toSubscription($this->postWithHeaders($path, ['at_period_end' => $atPeriodEnd], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]), $path);
     }
 
     /**
-     * `GET /api/v1/subscriptions?updated_since=&cursor=&limit=` answers the cursor envelope every
+     * `GET /v1/subscriptions?updated_since=&cursor=&limit=` answers the cursor envelope every
      * list endpoint uses: `{data, has_more, next_cursor}`.
      */
     public function subscriptions(?DateTimeInterface $updatedSince = null, ?string $cursor = null, ?int $limit = null): SubscriptionPage
     {
-        $path = '/api/v1/subscriptions';
+        $path = '/subscriptions';
         $query = array_filter([
             'updated_since' => $updatedSince?->format(DateTimeInterface::ATOM),
             'cursor' => $cursor,
@@ -335,17 +335,17 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
      */
     public function reactivate(string $org, ?string $idempotencyKey = null): Subscription
     {
-        $path = '/api/v1/subscriptions/'.rawurlencode($org).'/reactivate';
+        $path = '/subscriptions/'.rawurlencode($org).'/reactivate';
 
         return $this->toSubscription($this->postWithHeaders($path, [], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]), $path);
     }
 
     /**
-     * `GET /api/v1/organizations/{org}/bundles?product=&locale=`: the bundle benefits and offers.
+     * `GET /v1/organizations/{org}/bundles?product=&locale=`: the bundle benefits and offers.
      */
     public function bundles(string $org, ?string $product = null, ?string $locale = null): OrganizationBundles
     {
-        $path = '/api/v1/organizations/'.rawurlencode($org).'/bundles';
+        $path = '/organizations/'.rawurlencode($org).'/bundles';
         $query = array_filter(['product' => $product, 'locale' => $locale], static fn (?string $value): bool => $value !== null && $value !== '');
 
         return BundlePayload::organizationBundles(
@@ -355,11 +355,11 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     }
 
     /**
-     * `POST /api/v1/subscriptions/{org}/cancel/preview`: changes nothing.
+     * `POST /v1/subscriptions/{org}/cancel/preview`: changes nothing.
      */
     public function previewCancel(string $org, bool $atPeriodEnd = true, ?string $locale = null): CancelPreview
     {
-        $path = '/api/v1/subscriptions/'.rawurlencode($org).'/cancel/preview';
+        $path = '/subscriptions/'.rawurlencode($org).'/cancel/preview';
         $payload = ['mode' => $atPeriodEnd ? 'period_end' : 'immediate'];
 
         if ($locale !== null && $locale !== '') {
@@ -373,7 +373,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     public function ingestUsageEvents(string $org, array $events): UsageEventReceipt
     {
         UsageEvent::validateBatch($org, $events);
-        $body = $this->post('/api/v1/events', ['org' => $org,
+        $body = $this->post('/events', ['org' => $org,
             'events' => array_map(static fn (UsageEvent $event): array => $event->toArray(), $events)]);
 
         return UsageEventReceipt::fromResponse($body, $events);
@@ -413,12 +413,12 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         return $receipt;
     }
 
-    public function cancelLimitIncrease(string $org, int $requestId, ?string $product = null): LimitIncrease
+    public function cancelLimitIncrease(string $org, string $requestId, ?string $product = null): LimitIncrease
     {
-        if ($requestId < 1) {
-            throw new InvalidArgumentException('The request id must be positive.');
+        if (trim($requestId) === '') {
+            throw new InvalidArgumentException('The request id must not be empty.');
         }
-        $path = $this->resourcePath($org, 'limit-increase-requests/'.$requestId.'/cancel', $product);
+        $path = $this->resourcePath($org, 'limit-increase-requests/'.rawurlencode($requestId).'/cancel', $product);
         $receipt = ResourceLimitPayload::request($this->post($path, []), $path);
         if ($receipt->id !== $requestId || $receipt->status !== 'cancelled') {
             throw TransportException::malformed($path, 'cancellation does not match the request');
@@ -434,12 +434,12 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         }
         $query = http_build_query(array_filter(['product' => $product, 'page' => $page], static fn ($value) => $value !== null), '', '&', PHP_QUERY_RFC3986);
 
-        return '/api/v1/organizations/'.rawurlencode($org).'/'.$suffix.($query === '' ? '' : '?'.$query);
+        return '/organizations/'.rawurlencode($org).'/'.$suffix.($query === '' ? '' : '?'.$query);
     }
 
     public function usage(string $org): UsageSummary
     {
-        $path = '/api/v1/usage/'.rawurlencode($org);
+        $path = '/usage/'.rawurlencode($org);
         $body = $this->get($path);
 
         $rawMeters = $body['meters'] ?? null;
@@ -498,7 +498,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function invoices(string $org): array
     {
-        $path = '/api/v1/invoices/'.rawurlencode($org);
+        $path = '/invoices/'.rawurlencode($org);
         $rawInvoices = $this->allPages($path, 'invoices');
 
         $invoices = [];
@@ -522,7 +522,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function createInvoice(string $org, NewInvoice $invoice, string $idempotencyKey): IssuedInvoice
     {
-        $path = '/api/v1/invoices/'.rawurlencode($org);
+        $path = '/invoices/'.rawurlencode($org);
 
         return $this->toIssuedInvoice(
             $this->postWithHeaders($path, $invoice->toArray(), ['Idempotency-Key' => $idempotencyKey]),
@@ -532,7 +532,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function invoice(string $org, string $number): IssuedInvoice
     {
-        $path = '/api/v1/invoices/'.rawurlencode($org).'/'.rawurlencode($number);
+        $path = '/invoices/'.rawurlencode($org).'/'.rawurlencode($number);
 
         return $this->toIssuedInvoice($this->get($path), $path);
     }
@@ -585,7 +585,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             $this->stringOr($raw, 'status', 'open'),
             TaxPayload::int($raw['subtotal_minor'] ?? null),
             TaxPayload::int($raw['tax_minor'] ?? null),
-            $this->intField($raw, 'id', $path),
+            $this->idField($raw, 'id', $path),
             $lines,
             $appendix,
             $metadata,
@@ -610,7 +610,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function createOneOffQuote(string $org, string $reference, string $product, string $idempotencyKey, ?string $currency = null, int $quantity = 1): OneOffQuote
     {
-        $path = '/api/v1/one-off-quotes';
+        $path = '/one-off-quotes';
         $payload = ['org' => $org, 'reference' => $reference, 'product' => $product, 'quantity' => $quantity];
         if ($currency !== null) {
             $payload['currency'] = $currency;
@@ -621,47 +621,47 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function oneOffQuote(string $org, string $id): OneOffQuote
     {
-        $path = '/api/v1/one-off-quotes/'.rawurlencode($id);
+        $path = '/one-off-quotes/'.rawurlencode($id);
 
         return $this->toOneOffQuote($this->get($path.'?'.http_build_query(['org' => $org])), $path);
     }
 
     public function oneOffQuoteByReference(string $org, string $reference): OneOffQuote
     {
-        $path = '/api/v1/one-off-quotes/by-reference';
+        $path = '/one-off-quotes/by-reference';
 
         return $this->toOneOffQuote($this->get($path.'?'.http_build_query(['org' => $org, 'reference' => $reference])), $path);
     }
 
     public function acceptOneOffQuote(string $org, string $id, string $idempotencyKey): OneOffQuote
     {
-        $path = '/api/v1/one-off-quotes/'.rawurlencode($id).'/accept';
+        $path = '/one-off-quotes/'.rawurlencode($id).'/accept';
 
         return $this->toOneOffQuote($this->postWithHeaders($path, ['org' => $org], ['Idempotency-Key' => $idempotencyKey]), $path);
     }
 
     public function reconcileOneOffQuote(string $org, string $id): OneOffQuote
     {
-        $path = '/api/v1/one-off-quotes/'.rawurlencode($id).'/reconcile';
+        $path = '/one-off-quotes/'.rawurlencode($id).'/reconcile';
 
         return $this->toOneOffQuote($this->post($path, ['org' => $org]), $path);
     }
 
     public function cancelOneOffQuote(string $org, string $id, string $idempotencyKey): OneOffQuote
     {
-        $path = '/api/v1/one-off-quotes/'.rawurlencode($id).'/cancel';
+        $path = '/one-off-quotes/'.rawurlencode($id).'/cancel';
 
         return $this->toOneOffQuote($this->postWithHeaders($path, ['org' => $org], ['Idempotency-Key' => $idempotencyKey]), $path);
     }
 
     public function createOneOffQuotePaymentIntent(string $org, string $id): PaymentIntent
     {
-        return $this->toPaymentIntent($this->post('/api/v1/one-off-quotes/'.rawurlencode($id).'/payment-intent', ['org' => $org]));
+        return $this->toPaymentIntent($this->post('/one-off-quotes/'.rawurlencode($id).'/payment-intent', ['org' => $org]));
     }
 
     public function refundInvoice(string $org, string $number, string $idempotencyKey, string $reason = 'requested', ?int $amountMinor = null): InvoiceRefundResult
     {
-        $path = '/api/v1/invoices/'.rawurlencode($org).'/'.rawurlencode($number).'/refunds';
+        $path = '/invoices/'.rawurlencode($org).'/'.rawurlencode($number).'/refunds';
         $payload = ['reason' => $reason];
         if ($amountMinor !== null) {
             $payload['amount_minor'] = $amountMinor;
@@ -669,7 +669,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         $body = $this->postWithHeaders($path, $payload, ['Idempotency-Key' => $idempotencyKey]);
         $refund = $body['refund'] ?? null;
 
-        return new InvoiceRefundResult($this->stringField($body, 'status', $path), is_array($refund) && is_string($refund['id'] ?? null) ? $refund['id'] : null, is_int($body['approval'] ?? null) ? $body['approval'] : null);
+        return new InvoiceRefundResult($this->stringField($body, 'status', $path), is_array($refund) ? WireId::from($refund['id'] ?? null) : null, WireId::from($body['approval'] ?? null));
     }
 
     /** @param array<string, mixed> $body */
@@ -681,12 +681,12 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         }
 
         return new OneOffQuote(
-            $this->stringField($body, 'id', $path), $this->stringField($body, 'organization', $path),
+            $this->idField($body, 'id', $path), $this->idField($body, 'organization', $path),
             $this->stringField($body, 'reference', $path), $this->stringField($body, 'product', $path),
             $this->intField($body, 'quantity', $path), $this->stringField($body, 'currency', $path),
             $this->intField($body, 'net_minor', $path), $this->intField($body, 'tax_minor', $path),
             $this->intField($body, 'total_minor', $path), $this->stringField($body, 'price_version', $path),
-            $expiresAt, $this->stringField($body, 'status', $path), is_string($body['invoice'] ?? null) ? $body['invoice'] : null,
+            $expiresAt, $this->stringField($body, 'status', $path), WireId::from($body['invoice'] ?? null),
             $this->stringField($body, 'payment_status', $path),
         );
     }
@@ -694,7 +694,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     /** @param list<OneOffCheckoutItem> $items */
     public function createOneOffCheckoutSession(string $org, array $items, string $returnUrl, string $reference, string $idempotencyKey, ?string $currency = null): OneOffCheckoutSession
     {
-        $path = '/api/v1/checkout-sessions';
+        $path = '/checkout-sessions';
         $payload = ['org' => $org, 'items' => array_map(static fn (OneOffCheckoutItem $item): array => $item->toArray(), $items), 'return_url' => $returnUrl, 'reference' => $reference];
         if ($currency !== null) {
             $payload['currency'] = $currency;
@@ -714,7 +714,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
     {
-        $path = '/api/v1/checkout-sessions';
+        $path = '/checkout-sessions';
 
         /** @var array<string, mixed> $payload */
         $payload = ['org' => $org, 'plan' => $plan, 'return_url' => $returnUrl];
@@ -734,7 +734,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
     {
-        $path = '/api/v1/portal-sessions';
+        $path = '/portal-sessions';
         $body = $this->postWithHeaders($path, ['org' => $org, 'return_url' => $returnUrl], $this->sessionHeaders($idempotencyKey));
         $raw = is_array($body['portal_session'] ?? null) ? $body['portal_session'] : $body;
 
@@ -756,7 +756,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function createSetupIntent(string $org): SetupIntent
     {
-        $path = '/api/v1/setup-intents';
+        $path = '/setup-intents';
         $body = $this->post($path, ['org' => $org]);
         $raw = is_array($body['setup_intent'] ?? null) ? $body['setup_intent'] : $body;
 
@@ -775,7 +775,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             throw new InvalidArgumentException('createPaymentIntent requires either a reference or an amount.');
         }
 
-        $path = '/api/v1/payment-intents';
+        $path = '/payment-intents';
 
         /** @var array<string, mixed> $payload */
         $payload = ['org' => $org];
@@ -808,7 +808,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     public function paymentMethods(string $org): array
     {
-        $path = '/api/v1/payment-methods/'.rawurlencode($org);
+        $path = '/payment-methods/'.rawurlencode($org);
         $rawMethods = $this->allPages($path, 'payment_methods');
 
         $methods = [];
@@ -816,7 +816,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         foreach ($rawMethods as $raw) {
             if (is_array($raw)) {
                 $methods[] = new PaymentMethod(
-                    id: $this->stringField($raw, 'id', $path),
+                    id: $this->idField($raw, 'id', $path),
                     brand: $this->stringOr($raw, 'brand', ''),
                     last4: $this->stringOr($raw, 'last4', ''),
                     expMonth: $this->intOr($raw, 'exp_month', 0),
@@ -832,7 +832,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     public function setDefaultPaymentMethod(string $org, string $id): void
     {
         $this->postDiscardingBody(
-            '/api/v1/payment-methods/'.rawurlencode($org).'/default',
+            '/payment-methods/'.rawurlencode($org).'/default',
             // The server validates `id`; `payment_method` was rejected with a 422 every time.
             ['id' => $id],
         );
@@ -841,7 +841,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     public function removePaymentMethod(string $org, string $id): void
     {
         $this->deleteDiscardingBody(
-            '/api/v1/payment-methods/'.rawurlencode($org).'/'.rawurlencode($id),
+            '/payment-methods/'.rawurlencode($org).'/'.rawurlencode($id),
         );
     }
 
@@ -882,7 +882,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             ? $raw['price']
             : ['minor' => $raw['price_minor'] ?? null, 'currency' => $raw['currency'] ?? null];
         if (! is_array($price)) {
-            throw TransportException::malformed('/api/v1/plans', 'missing or invalid price');
+            throw TransportException::malformed('/plans', 'missing or invalid price');
         }
         $minor = $price['minor'] ?? null;
         if (is_string($minor) && preg_match('/^(0|[1-9][0-9]*)$/D', $minor) === 1) {
@@ -890,7 +890,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         }
         $currency = $price['currency'] ?? null;
         if (! is_int($minor) || $minor < 0 || ! is_string($currency) || preg_match('/^[A-Za-z]{3}$/D', $currency) !== 1) {
-            throw TransportException::malformed('/api/v1/plans', 'invalid price amount or currency');
+            throw TransportException::malformed('/plans', 'invalid price amount or currency');
         }
 
         return new Plan(
@@ -915,7 +915,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             return null;
         }
         if (! is_array($raw)) {
-            throw TransportException::malformed('/api/v1/plans', 'invalid usage prices');
+            throw TransportException::malformed('/plans', 'invalid usage prices');
         }
         $prices = [];
         foreach ($raw as $meter => $rate) {
@@ -924,7 +924,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
                 || ! is_int($rate['per'] ?? null) || $rate['per'] < 1
                 || ! is_string($rate['currency'] ?? null)
                 || strtoupper($rate['currency']) !== strtoupper($currency)) {
-                throw TransportException::malformed('/api/v1/plans', 'invalid usage rate');
+                throw TransportException::malformed('/plans', 'invalid usage rate');
             }
             $prices[$meter] = new UsagePrice($rate['minor'], $rate['currency'], $rate['per']);
         }
@@ -975,8 +975,8 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     private function toSubscriptionChange(array $raw, string $path): SubscriptionChange
     {
         return new SubscriptionChange(
-            id: $this->intField($raw, 'id', $path),
-            organizationId: $this->stringField($raw, 'organization_id', $path),
+            id: $this->idField($raw, 'id', $path),
+            organizationId: $this->idField($raw, 'organization_id', $path),
             organizationRef: $this->nullableString($raw, 'organization_ref'),
             plan: $this->nullableString($raw, 'plan'),
             product: $this->nullableString($raw, 'product'),
@@ -1015,7 +1015,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             publishableKey: $this->stringOr($raw, 'publishable_key', ''),
             clientSecret: is_string($raw['client_secret'] ?? null) ? (string) $raw['client_secret'] : null,
             status: $this->stringOr($raw, 'status', ''),
-            reference: $this->stringOr($raw, 'reference', $this->stringOr($raw, 'id', '')),
+            reference: $this->stringOr($raw, 'reference', WireId::from($raw['id'] ?? null) ?? ''),
         );
     }
 
@@ -1255,6 +1255,14 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $body
+     */
+    private function idField(array $body, string $key, string $path): string
+    {
+        return WireId::from($body[$key] ?? null) ?? throw TransportException::malformed($path, "missing id field [{$key}]");
     }
 
     /**

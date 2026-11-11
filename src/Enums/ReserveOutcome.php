@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\Enums;
 
 /**
  * The three-way result of an authoritative REMOTE reservation
- * (`POST /api/v1/reserve`) — the synchronous round-trip path, distinct from the
+ * (`POST /v1/reserve`) — the synchronous round-trip path, distinct from the
  * local leased hot path. It mirrors the engine's enforcement outcomes so callers and
  * telemetry see WHICH path fired rather than collapsing to a boolean.
  *

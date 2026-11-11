@@ -12,7 +12,7 @@ it('collects every page without following cursor URLs', function (string $method
     Http::fakeSequence()->push(['data' => [$row], 'has_more' => true, 'next_cursor' => $cursor])
         ->push(['data' => [array_replace($row, [$field => 'second'])], 'has_more' => false, 'next_cursor' => null]);
 
-    $items = (new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'secret-token'))->{$method}('org/a');
+    $items = (new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret-token'))->{$method}('org/a');
     expect($items)->toHaveCount(2)->and($items[1]->{$field})->toBe('second');
     $requests = Http::recorded();
     expect($requests[0][0]->url())->toBe('https://billing.test/api/v1/'.$endpoint.'/org%2Fa');
@@ -24,7 +24,7 @@ it('collects every page without following cursor URLs', function (string $method
 
 it('rejects incomplete or malformed pagination instead of returning partial collections', function (array $tail): void {
     Http::fakeSequence()->push(array_replace(['data' => [['id' => 'first']], 'has_more' => true], $tail));
-    expect(fn () => (new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'secret-token'))->paymentMethods('org_a'))->toThrow(TransportException::class);
+    expect(fn () => (new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret-token'))->paymentMethods('org_a'))->toThrow(TransportException::class);
 })->with([
     'missing cursor' => [[]],
     'empty cursor' => [['next_cursor' => '']],
@@ -37,7 +37,7 @@ it('rejects incomplete or malformed pagination instead of returning partial coll
 it('rejects repeated cursors', function (): void {
     Http::fakeSequence()->push(['data' => [], 'has_more' => true, 'next_cursor' => 'same'])
         ->push(['data' => [], 'has_more' => true, 'next_cursor' => 'same']);
-    expect(fn () => (new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'secret-token'))->invoices('org_a'))->toThrow(TransportException::class);
+    expect(fn () => (new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret-token'))->invoices('org_a'))->toThrow(TransportException::class);
     Http::assertSentCount(2);
 });
 
@@ -46,6 +46,6 @@ it('bounds endless unique pagination', function (): void {
     Http::fake(function () use (&$page) {
         return Http::response(['data' => [], 'has_more' => true, 'next_cursor' => 'page-'.++$page]);
     });
-    expect(fn () => (new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'secret-token'))->paymentMethods('org_a'))->toThrow(TransportException::class);
+    expect(fn () => (new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret-token'))->paymentMethods('org_a'))->toThrow(TransportException::class);
     Http::assertSentCount(1000);
 });

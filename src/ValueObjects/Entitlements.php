@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * An organization's entitlement set, keyed by meter — the decoded
- * `GET /api/v1/entitlements/{org}` response. Deny-by-default: an unknown meter has
+ * `GET /v1/entitlements/{org}` response. Deny-by-default: an unknown meter has
  * no entitlement and {@see enabled()} reports false, so a caller that gates on it
  * treats an unlisted meter as not entitled rather than silently trusted.
  */

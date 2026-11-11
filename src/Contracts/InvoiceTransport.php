@@ -25,7 +25,7 @@ use Cbox\Billing\Client\ValueObjects\NewInvoice;
 interface InvoiceTransport
 {
     /**
-     * Issue a manual invoice to `org` (`POST /api/v1/invoices/{org}`), exactly as the console's
+     * Issue a manual invoice to `org` (`POST /v1/invoices/{org}`), exactly as the console's
      * "new invoice" does. The `$idempotencyKey` travels as the `Idempotency-Key` header: the same
      * key with the same body returns the same invoice, with a different body it is a 409.
      *
@@ -35,7 +35,7 @@ interface InvoiceTransport
 
     /**
      * One invoice with its lines, appendix, metadata and signed `pdf_url`
-     * (`GET /api/v1/invoices/{org}/{number}`).
+     * (`GET /v1/invoices/{org}/{number}`).
      *
      * @throws TransportException a BillingRefused when billing says no (404 for an unknown number), a BillingUnavailable when it cannot answer
      */

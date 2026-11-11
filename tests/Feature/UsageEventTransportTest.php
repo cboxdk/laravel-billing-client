@@ -21,7 +21,7 @@ function usageEvent(string $id = 'sample-1', string $meter = 'compute.cpu_ms'): 
 
 function usageEventClient(): BillingManagement
 {
-    return new BillingManagement(new HttpManagementTransport(app(HttpFactory::class), 'https://billing.test', 'token'));
+    return new BillingManagement(new HttpManagementTransport(app(HttpFactory::class), 'https://billing.test/api/v1', 'token'));
 }
 
 it('sends stable event identity time quantity and dimensions through the management client', function (): void {

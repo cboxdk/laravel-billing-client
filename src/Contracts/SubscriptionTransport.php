@@ -26,7 +26,7 @@ use DateTimeInterface;
 interface SubscriptionTransport
 {
     /**
-     * One page of the subscription change feed (`GET /api/v1/subscriptions`), oldest change
+     * One page of the subscription change feed (`GET /v1/subscriptions`), oldest change
      * first: every subscription changed at or after `$updatedSince` (all of them when null),
      * continued from `$cursor`, at most `$limit` rows (the server's default when null).
      *
@@ -35,7 +35,7 @@ interface SubscriptionTransport
     public function subscriptions(?DateTimeInterface $updatedSince = null, ?string $cursor = null, ?int $limit = null): SubscriptionPage;
 
     /**
-     * Reactivate `org`'s subscription (`POST /api/v1/subscriptions/{org}/reactivate`): resume a
+     * Reactivate `org`'s subscription (`POST /v1/subscriptions/{org}/reactivate`): resume a
      * pause, undo a scheduled period-end cancel, or bring back one canceled within the win-back
      * window. On a subscription that is already active the server answers 409.
      *

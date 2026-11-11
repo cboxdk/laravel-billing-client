@@ -154,7 +154,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     /**
      * Every subscription the change feed lists, serving or not, keyed by org.
      *
-     * @var array<string, array{id: int, subscription: Subscription, canceledAt: ?DateTimeImmutable, updatedAt: DateTimeImmutable}>
+     * @var array<string, array{id: string, subscription: Subscription, canceledAt: ?DateTimeImmutable, updatedAt: DateTimeImmutable}>
      */
     private array $records = [];
 
@@ -531,7 +531,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
 
         $segments = array_map(
             rawurldecode(...),
-            explode('/', trim((string) preg_replace('#^/?api/v1/?#', '', $path), '/')),
+            explode('/', trim((string) preg_replace('#^/?(?:api/)?v1/?#', '', $path), '/')),
         );
         $count = count($segments);
         $resource = $segments[0];
@@ -932,7 +932,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         if (is_string($query['cursor'] ?? null) && $query['cursor'] !== '') {
             $decoded = json_decode((string) base64_decode(strtr($query['cursor'], '-_', '+/'), true), true);
 
-            if (! is_array($decoded) || ! is_string($decoded[0] ?? null) || ! is_int($decoded[1] ?? null)) {
+            if (! is_array($decoded) || ! is_string($decoded[0] ?? null) || ! is_string($decoded[1] ?? null)) {
                 return FakeResponse::error(400, 'The cursor is invalid.');
             }
 
@@ -984,7 +984,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         $existing = $this->records[$org] ?? null;
 
         $this->records[$org] = [
-            'id' => $existing === null || $fresh ? ++$this->subscriptionSeq : $existing['id'],
+            'id' => $existing === null || $fresh ? FakePublicId::make('sub', ++$this->subscriptionSeq) : $existing['id'],
             'subscription' => $subscription,
             'canceledAt' => $canceledAt,
             'updatedAt' => $at === null ? new DateTimeImmutable : DateTimeImmutable::createFromInterface($at),
@@ -1128,7 +1128,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             'open',
             $net,
             0,
-            $this->invoiceSeq,
+            FakePublicId::make('inv', $this->invoiceSeq),
             $lines,
             $appendix,
             $metadata,
@@ -1379,7 +1379,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
      *
      * @return array<string, mixed>
      */
-    private function presentChange(string $org, int $id, Subscription $subscription, ?DateTimeImmutable $canceledAt, DateTimeImmutable $updatedAt): array
+    private function presentChange(string $org, string $id, Subscription $subscription, ?DateTimeImmutable $canceledAt, DateTimeImmutable $updatedAt): array
     {
         return [
             'id' => $id,

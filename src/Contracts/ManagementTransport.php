@@ -41,7 +41,7 @@ use Cbox\Billing\Client\ValueObjects\UsageSummary;
 interface ManagementTransport
 {
     /**
-     * List the subscribable plans (`GET /api/v1/plans`), priced in `$currency` when
+     * List the subscribable plans (`GET /v1/plans`), priced in `$currency` when
      * given (ISO 4217), else the caller's account currency / service default.
      *
      * @return list<Plan>
@@ -52,7 +52,7 @@ interface ManagementTransport
 
     /**
      * Idempotently provision the organization this platform bills for
-     * (`PUT /api/v1/organizations/{org}`). Safe to call before every subscribe /
+     * (`PUT /v1/organizations/{org}`). Safe to call before every subscribe /
      * checkout; `billing_currency` in `$attributes` is only applied on create
      * (the billing service's one-way currency lock).
      *
@@ -63,7 +63,7 @@ interface ManagementTransport
     public function ensureOrganization(string $org, array $attributes): void;
 
     /**
-     * The organization's current subscription (`GET /api/v1/subscriptions/{org}`), or
+     * The organization's current subscription (`GET /v1/subscriptions/{org}`), or
      * null when it has none. The server answers that case with a 404, which an
      * implementation must return as null rather than throw.
      *
@@ -72,7 +72,7 @@ interface ManagementTransport
     public function subscription(string $org): ?Subscription;
 
     /**
-     * Subscribe `org` to `plan` (`POST /api/v1/subscriptions`), returning the new
+     * Subscribe `org` to `plan` (`POST /v1/subscriptions`), returning the new
      * subscription and any payment intent to confirm.
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
@@ -81,14 +81,14 @@ interface ManagementTransport
 
     /**
      * Preview switching `org` to `plan` without applying it
-     * (`POST /api/v1/subscriptions/{org}/preview`).
+     * (`POST /v1/subscriptions/{org}/preview`).
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function previewChange(string $org, string $plan): ChangePreview;
 
     /**
-     * Change `org` to `plan` (`POST /api/v1/subscriptions/{org}/change`), returning the
+     * Change `org` to `plan` (`POST /v1/subscriptions/{org}/change`), returning the
      * updated subscription.
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
@@ -96,7 +96,7 @@ interface ManagementTransport
     public function changePlan(string $org, string $plan): ChangePreview;
 
     /**
-     * Cancel `org`'s subscription (`POST /api/v1/subscriptions/{org}/cancel`);
+     * Cancel `org`'s subscription (`POST /v1/subscriptions/{org}/cancel`);
      * `$atPeriodEnd` cancels at period end rather than immediately.
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
@@ -104,14 +104,14 @@ interface ManagementTransport
     public function cancel(string $org, bool $atPeriodEnd): Subscription;
 
     /**
-     * The organization's current-period usage per meter (`GET /api/v1/usage/{org}`).
+     * The organization's current-period usage per meter (`GET /v1/usage/{org}`).
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
     public function usage(string $org): UsageSummary;
 
     /**
-     * The organization's invoice history (`GET /api/v1/invoices/{org}`).
+     * The organization's invoice history (`GET /v1/invoices/{org}`).
      *
      * @return list<Invoice>
      *
@@ -120,7 +120,7 @@ interface ManagementTransport
     public function invoices(string $org): array;
 
     /**
-     * Open a hosted-checkout session (`POST /api/v1/checkout-sessions`) for `org` to take
+     * Open a hosted-checkout session (`POST /v1/checkout-sessions`) for `org` to take
      * up `plan`, redirecting to `returnUrl` when done and optionally pricing in
      * `$currency`. Path A of ADR-0009: billing collects payment on its own pages.
      *
@@ -129,7 +129,7 @@ interface ManagementTransport
     public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession;
 
     /**
-     * Open a billing-portal session (`POST /api/v1/portal-sessions`) for `org`, returning
+     * Open a billing-portal session (`POST /v1/portal-sessions`) for `org`, returning
      * to `returnUrl` when the user leaves. Path A of ADR-0009: billing hosts the
      * self-service portal.
      *
@@ -138,7 +138,7 @@ interface ManagementTransport
     public function createPortalSession(string $org, string $returnUrl): PortalSession;
 
     /**
-     * Create a gateway setup intent (`POST /api/v1/setup-intents`) so `org` can store a
+     * Create a gateway setup intent (`POST /v1/setup-intents`) so `org` can store a
      * payment method with no immediate charge. Path B of ADR-0009: the front-end mounts
      * the gateway element with the returned `{gateway, publishableKey, clientSecret}`.
      *
@@ -147,7 +147,7 @@ interface ManagementTransport
     public function createSetupIntent(string $org): SetupIntent;
 
     /**
-     * Create a gateway payment intent (`POST /api/v1/payment-intents`) charging `org`,
+     * Create a gateway payment intent (`POST /v1/payment-intents`) charging `org`,
      * for either an existing `$reference` (e.g. an open invoice) or an ad-hoc
      * `$amountMinor` in `$currency` — at least one must be given. Path B of ADR-0009: the
      * front-end confirms the returned `clientSecret` and a webhook confirms settlement.
@@ -158,7 +158,7 @@ interface ManagementTransport
 
     /**
      * The organization's stored payment methods
-     * (`GET /api/v1/payment-methods/{org}`).
+     * (`GET /v1/payment-methods/{org}`).
      *
      * @return list<PaymentMethod>
      *
@@ -168,7 +168,7 @@ interface ManagementTransport
 
     /**
      * Make payment method `$id` the default for `org`
-     * (`POST /api/v1/payment-methods/{org}/default`).
+     * (`POST /v1/payment-methods/{org}/default`).
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
@@ -176,7 +176,7 @@ interface ManagementTransport
 
     /**
      * Remove payment method `$id` from `org`
-     * (`DELETE /api/v1/payment-methods/{org}/{id}`).
+     * (`DELETE /v1/payment-methods/{org}/{id}`).
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */

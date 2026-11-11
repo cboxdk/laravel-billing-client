@@ -3,7 +3,7 @@
     "request": "GET /api/v1/invoices/{org}/{number} (POST /api/v1/invoices/{org} answers the same body with 201)",
     "status": 200,
     "body": {
-        "id": 17,
+        "id": "inv_7Hq2kV9xTq3LmN0pR4sW1z",
         "number": "INV-1001",
         "date": "2026-11-02T00:00:00+00:00",
         "amount_minor": 1875000,

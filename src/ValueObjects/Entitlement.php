@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * The billing-side policy for one `(org, meter)`, as read from
- * `GET /api/v1/entitlements/{org}`: whether the meter is `enabled`, its included
+ * `GET /v1/entitlements/{org}`: whether the meter is `enabled`, its included
  * `allowance`, the `weight` used to convert raw units into billable cost, and the
  * `overage` behaviour past the allowance (`"block"` = hard limit, `"bill"` = paid
  * overage). The overage string is kept as-is off the wire so a new behaviour added

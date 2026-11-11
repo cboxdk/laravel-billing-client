@@ -63,7 +63,7 @@ it('sets a connect timeout on every call it makes', function (): void {
 });
 
 it('asks the service access check with the subject and organization', function (): void {
-    Http::fake(['*' => Http::response(['allowed' => false, 'reason' => 'waitlisted', 'program' => ['id' => 1]])]);
+    Http::fake(['*' => Http::response(['allowed' => false, 'reason' => 'waitlisted', 'program' => ['id' => 'acp_2mN8bV4cX6zL1kJ9hG3fD5']])]);
 
     $decision = app(ServiceAccessTransport::class)->check('cbox telemetry', 'usr_1', 'org_1');
 

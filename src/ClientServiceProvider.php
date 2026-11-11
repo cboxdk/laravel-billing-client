@@ -22,6 +22,7 @@ use Cbox\Billing\Client\Contracts\ReservationRegistry;
 use Cbox\Billing\Client\Contracts\ServiceAccessTransport;
 use Cbox\Billing\Client\Contracts\UsageBuffer;
 use Cbox\Billing\Client\Enums\FailurePolicy;
+use Cbox\Billing\Client\Http\ApiUrl;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\Http\HttpDefinitionTransport;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
@@ -52,11 +53,10 @@ use Illuminate\Support\ServiceProvider;
 /**
  * Wires the app-local billing client. The node-local lease store, reservation
  * registry, and durable usage buffer are always bound (cache-backed by default, the
- * buffer optionally database-backed); the HTTP transports are bound only when a base
- * URL and API token are configured — without them the host must bind its own
- * {@see BillingTransport}/{@see ManagementTransport} (e.g. the in-memory fakes in
- * tests), keeping the package deny-by-default about the network rather than pointing
- * at a phantom endpoint.
+ * buffer optionally database-backed). The HTTP transports call the API URL that
+ * {@see ApiUrl} resolves from `api_url` (or the old `base_url`); without an API token
+ * Billing refuses every call, so a host that has none binds its own
+ * {@see BillingTransport}/{@see ManagementTransport} (e.g. the in-memory fakes in tests).
  */
 class ClientServiceProvider extends ServiceProvider
 {
@@ -69,7 +69,7 @@ class ClientServiceProvider extends ServiceProvider
 
             return new HttpDefinitionTransport(
                 $app->make(HttpFactory::class),
-                self::stringConfig($config, 'billing-client.base_url', ''),
+                self::apiUrl($config),
                 self::stringConfig($config, 'billing-client.definition_token', ''),
                 connectTimeout: self::intConfig($config, 'billing-client.connect_timeout', 2),
             );
@@ -124,7 +124,7 @@ class ClientServiceProvider extends ServiceProvider
 
             return new HttpServiceAccessTransport(
                 $app->make(HttpFactory::class),
-                self::nullableStringConfig($config, 'billing-client.service_access.url') ?? self::stringConfig($config, 'billing-client.base_url', ''),
+                self::serviceAccessUrl($config),
                 self::nullableStringConfig($config, 'billing-client.service_access.token') ?? self::stringConfig($config, 'billing-client.api_token', ''),
                 self::intConfig($config, 'billing-client.timeout', 5),
                 self::intConfig($config, 'billing-client.connect_timeout', 2),
@@ -198,7 +198,7 @@ class ClientServiceProvider extends ServiceProvider
 
             return new HttpBillingTransport(
                 $app->make(HttpFactory::class),
-                self::stringConfig($config, 'billing-client.base_url', ''),
+                self::apiUrl($config),
                 self::stringConfig($config, 'billing-client.api_token', ''),
                 self::intConfig($config, 'billing-client.timeout', 5),
                 self::intConfig($config, 'billing-client.connect_timeout', 2),
@@ -275,7 +275,7 @@ class ClientServiceProvider extends ServiceProvider
 
             return new HttpManagementTransport(
                 $app->make(HttpFactory::class),
-                self::stringConfig($config, 'billing-client.base_url', ''),
+                self::apiUrl($config),
                 self::stringConfig($config, 'billing-client.api_token', ''),
                 self::intConfig($config, 'billing-client.timeout', 5),
                 self::intConfig($config, 'billing-client.connect_timeout', 2),
@@ -366,6 +366,20 @@ class ClientServiceProvider extends ServiceProvider
         $store = $config->get('billing-client.cache_store');
 
         return is_string($store) && $store !== '' ? $store : null;
+    }
+
+    /** The versioned API base every transport appends its paths to; see {@see ApiUrl}. */
+    private static function apiUrl(Config $config): string
+    {
+        return ApiUrl::fromConfig($config);
+    }
+
+    /** `service_access.url` when set (an old root URL gets `/api/v1`), else the API URL. */
+    private static function serviceAccessUrl(Config $config): string
+    {
+        $url = self::nullableStringConfig($config, 'billing-client.service_access.url');
+
+        return $url === null ? self::apiUrl($config) : ApiUrl::fromLegacy($url);
     }
 
     private static function stringConfig(Config $config, string $key, string $default): string

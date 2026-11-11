@@ -15,7 +15,7 @@ organization's allowance ahead of time and enforces against that slice locally.
 - **Tier 1 (local):** `reserve` takes units from the node-local `LocalLeaseStore` with
   an atomic decrement-and-compensate. No network.
 - **Tier 2 (remote):** when the slice is short, the `LeaseManager` leases a fresh slice
-  (`POST /api/v1/leases`) sized to at least `lease_size`.
+  (`POST /v1/leases`) sized to at least `lease_size`.
 
 ## Pessimistic leasing is what makes the hard limit real
 

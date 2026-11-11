@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * The actual number of `units` consumed for one `meter`, settling a remote
- * reservation (`POST /api/v1/commit`).
+ * reservation (`POST /v1/commit`).
  */
 readonly class MeterActual
 {

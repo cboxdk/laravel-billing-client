@@ -20,7 +20,7 @@ it('publishes exactly the declaration and accepts the matching response', functi
     Http::fake(['https://billing.test/api/v1/definitions' => Http::response(['data' => [
         ['kind' => 'feature', 'key' => 'sites.domains', 'version' => '1', 'retired_at' => null],
     ]])]);
-    $transport = new HttpDefinitionTransport(app(Factory::class), 'https://billing.test', 'definition-secret');
+    $transport = new HttpDefinitionTransport(app(Factory::class), 'https://billing.test/api/v1', 'definition-secret');
     $transport->sync(DefinitionManifest::fromJson(definitionDocument()));
     Http::assertSent(fn ($request): bool => $request->method() === 'PUT'
         && $request->hasHeader('Authorization', 'Bearer definition-secret')
@@ -29,7 +29,7 @@ it('publishes exactly the declaration and accepts the matching response', functi
 
 it('refuses incomplete, wrong-version, and duplicate acknowledgements', function (array $data): void {
     Http::fake(['*' => Http::response(['data' => $data])]);
-    $transport = new HttpDefinitionTransport(app(Factory::class), 'https://billing.test', 'secret');
+    $transport = new HttpDefinitionTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret');
     expect(fn () => $transport->sync(DefinitionManifest::fromJson(definitionDocument())))->toThrow(BillingUnavailable::class);
 })->with([
     'missing' => [[]],
@@ -39,14 +39,14 @@ it('refuses incomplete, wrong-version, and duplicate acknowledgements', function
 
 it('never follows redirects with the publisher credential', function (): void {
     Http::fake(['*' => Http::response('', 302, ['Location' => 'https://other.test/'])]);
-    $transport = new HttpDefinitionTransport(app(Factory::class), 'https://billing.test', 'secret');
+    $transport = new HttpDefinitionTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret');
     expect(fn () => $transport->sync(DefinitionManifest::fromJson(definitionDocument())))->toThrow(BillingUnavailable::class);
     Http::assertSentCount(1);
 });
 
 it('refuses unconfigured publication without making a network call', function (): void {
     Http::fake();
-    expect(fn () => (new HttpDefinitionTransport(app(Factory::class), 'https://billing.test', ''))->sync(DefinitionManifest::fromJson(definitionDocument())))->toThrow(BillingRefused::class);
+    expect(fn () => (new HttpDefinitionTransport(app(Factory::class), 'https://billing.test/api/v1', ''))->sync(DefinitionManifest::fromJson(definitionDocument())))->toThrow(BillingRefused::class);
     Http::assertNothingSent();
 });
 

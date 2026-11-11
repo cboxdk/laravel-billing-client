@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * One meter's running usage total for an organization, as reported to billing
- * (`POST /api/v1/usage`). Reporting is CUMULATIVE and self-correcting: `cumulative`
+ * (`POST /v1/usage`). Reporting is CUMULATIVE and self-correcting: `cumulative`
  * is the monotonically-increasing total consumed on this node since the period
  * began, and `seq` is a per-(org, meter) monotonic version. Billing keeps the
  * highest cumulative it has seen per (node, meter), so a dropped report is backfilled

@@ -34,7 +34,7 @@ use Cbox\Billing\Client\ValueObjects\RemoteReservation;
 interface BillingTransport
 {
     /**
-     * Lease up to `size` units of `meter` for `org` (`POST /api/v1/leases`). Billing
+     * Lease up to `size` units of `meter` for `org` (`POST /v1/leases`). Billing
      * grants however many the central budget can currently reserve (0 when the
      * allowance is exhausted); the granted units are reserved centrally until used or
      * expired.
@@ -44,7 +44,7 @@ interface BillingTransport
     public function lease(string $org, string $meter, int $size): LeaseGrant;
 
     /**
-     * Report the current CUMULATIVE usage totals for `org` (`POST /api/v1/usage`).
+     * Report the current CUMULATIVE usage totals for `org` (`POST /v1/usage`).
      * Cumulative and idempotent: billing keeps the highest total per (node, meter),
      * so re-sending is safe and a dropped report self-corrects on the next flush.
      *
@@ -56,7 +56,7 @@ interface BillingTransport
 
     /**
      * Authoritatively reserve a set of meter estimates for `org` in one round-trip
-     * (`POST /api/v1/reserve`) — the synchronous path, distinct from the local leased
+     * (`POST /v1/reserve`) — the synchronous path, distinct from the local leased
      * hot path. Returns billing's three-way decision.
      *
      * @param  list<MeterEstimate>  $meters
@@ -67,7 +67,7 @@ interface BillingTransport
 
     /**
      * Settle an authoritative remote reservation to its actual usage
-     * (`POST /api/v1/commit`).
+     * (`POST /v1/commit`).
      *
      * @param  list<MeterActual>  $actuals
      *
@@ -76,7 +76,7 @@ interface BillingTransport
     public function commit(string $reservationId, array $actuals): void;
 
     /**
-     * Read `org`'s entitlement set (`GET /api/v1/entitlements/{org}`).
+     * Read `org`'s entitlement set (`GET /v1/entitlements/{org}`).
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */

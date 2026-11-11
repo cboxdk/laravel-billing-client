@@ -220,7 +220,7 @@ class LeaseManager
     private function guard(bool $probe): void
     {
         if (! $probe && $this->breaker?->isOpen() === true) {
-            throw new BillingUnavailable('Billing was unreachable moments ago; not waiting on a lease refill while the breaker is open.', '/api/v1/leases');
+            throw new BillingUnavailable('Billing was unreachable moments ago; not waiting on a lease refill while the breaker is open.', '/leases');
         }
     }
 

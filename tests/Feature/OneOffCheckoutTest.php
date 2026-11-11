@@ -26,7 +26,7 @@ it('supports standalone orders and redacted idempotent replay through the offici
 
 it('sends typed catalog items and the caller key unchanged and refuses malformed success', function (): void {
     Http::fake(['billing.test/*' => Http::sequence()->push(['expires_at' => '2026-11-05T12:00:00Z'])->push([])]);
-    $transport = new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'test-token');
+    $transport = new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'test-token');
     $transport->createOneOffCheckoutSession('org_1', [new OneOffCheckoutItem('registration', 2)], 'https://app.test/done', 'order:exact', 'key:exact', 'DKK');
     Http::assertSent(fn (Request $request): bool => $request->hasHeader('Idempotency-Key', 'key:exact')
         && $request['reference'] === 'order:exact' && $request['org'] === 'org_1'

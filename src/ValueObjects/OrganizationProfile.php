@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\ValueObjects;
 
 /**
- * What billing stores about an organization, as it answers `PUT /api/v1/organizations/{org}`.
+ * What billing stores about an organization, as it answers `PUT /v1/organizations/{org}`.
  *
  * `shared` is billing's `"account": "shared"`: another product owns the account, so the contact
  * and the address read null here and the upsert only filled what was empty. `taxIdValidated` is

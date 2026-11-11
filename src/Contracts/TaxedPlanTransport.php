@@ -11,7 +11,7 @@ use Cbox\Billing\Client\Testing\FakeManagementTransport;
 use Cbox\Billing\Client\ValueObjects\Plan;
 
 /**
- * The catalog priced for a buyer, added in 0.4.6: `GET /api/v1/plans?org=&country=`. A separate
+ * The catalog priced for a buyer, added in 0.4.6: `GET /v1/plans?org=&country=`. A separate
  * contract, like {@see SubscriptionTransport}, so a transport written against an earlier release
  * keeps compiling. {@see HttpManagementTransport} and {@see FakeManagementTransport} implement it;
  * {@see BillingManagement::plans()} throws an UnsupportedOperation when it is asked for a buyer

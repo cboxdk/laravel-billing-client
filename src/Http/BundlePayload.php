@@ -82,7 +82,7 @@ class BundlePayload
                 priceBeforeMinor: self::int($item, 'price_before_minor', $path),
                 priceAfterMinor: self::int($item, 'price_after_minor', $path),
                 currency: self::string($item, 'currency', $path),
-                subscription: self::optional($item, 'subscription'),
+                subscription: WireId::from($item['subscription'] ?? null),
                 product: self::optional($item, 'product'),
                 productName: self::optional($item, 'product_name'),
                 plan: self::optional($item, 'plan'),
@@ -103,7 +103,7 @@ class BundlePayload
             mode: self::string($raw, 'mode', $path),
             endsAt: self::date($raw['ends_at'] ?? null),
             consequences: self::consequences($raw['consequences'] ?? null, $path),
-            subscription: self::optional($raw, 'subscription'),
+            subscription: WireId::from($raw['subscription'] ?? null),
         );
     }
 
@@ -116,7 +116,7 @@ class BundlePayload
             $bundle = self::subscriptionBundle($item, $path);
 
             if ($bundle !== null) {
-                $active[] = new ActiveBundle($bundle, self::optional($item, 'subscription'), self::optional($item, 'product'), self::optional($item, 'plan'));
+                $active[] = new ActiveBundle($bundle, WireId::from($item['subscription'] ?? null), self::optional($item, 'product'), self::optional($item, 'plan'));
             }
         }
 
@@ -127,7 +127,7 @@ class BundlePayload
         }
 
         return new OrganizationBundles(
-            organization: self::string($raw, 'organization', $path),
+            organization: WireId::from($raw['organization'] ?? null) ?? throw TransportException::malformed($path, 'missing or non-string organization'),
             currency: self::string($raw, 'currency', $path),
             locale: self::string($raw, 'locale', $path),
             active: $active,
@@ -196,7 +196,7 @@ class BundlePayload
             saves: is_array($saves) ? new BundleSaving(
                 priceBeforeMinor: self::int($saves, 'price_before_minor', $path),
                 priceAfterMinor: self::int($saves, 'price_after_minor', $path),
-                subscription: self::optional($saves, 'subscription'),
+                subscription: WireId::from($saves['subscription'] ?? null),
                 product: self::optional($saves, 'product'),
                 plan: self::optional($saves, 'plan'),
                 from: self::date($saves['from'] ?? null),

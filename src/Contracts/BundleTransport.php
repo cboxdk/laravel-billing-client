@@ -22,7 +22,7 @@ interface BundleTransport
 {
     /**
      * The bundle benefits on `org`'s subscriptions and the offers to show
-     * (`GET /api/v1/organizations/{org}/bundles`), narrowed to `$product` (a product-bound token
+     * (`GET /v1/organizations/{org}/bundles`), narrowed to `$product` (a product-bound token
      * is narrowed to its own), with copy in `$locale` (the customer's own when null).
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
@@ -30,7 +30,7 @@ interface BundleTransport
     public function bundles(string $org, ?string $product = null, ?string $locale = null): OrganizationBundles;
 
     /**
-     * What cancelling `org`'s subscription would do (`POST /api/v1/subscriptions/{org}/cancel/preview`):
+     * What cancelling `org`'s subscription would do (`POST /v1/subscriptions/{org}/cancel/preview`):
      * when it ends, and the bundle benefits the organization's other subscriptions lose. Changes
      * nothing.
      *

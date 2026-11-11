@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\ValueObjects;
 
 /**
- * One meter's usage within the current period (`GET /api/v1/usage/{org}`): units
+ * One meter's usage within the current period (`GET /v1/usage/{org}`): units
  * `used`, the included `allowance`, and the `overage` beyond it. `overage` is what the
  * app surfaces to warn a user they are into paid (or blocked) territory.
  */

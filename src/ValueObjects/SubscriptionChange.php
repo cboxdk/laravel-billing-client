@@ -7,11 +7,11 @@ namespace Cbox\Billing\Client\ValueObjects;
 use DateTimeImmutable;
 
 /**
- * One row of the subscription change feed (`GET /api/v1/subscriptions`): a subscription as it
+ * One row of the subscription change feed (`GET /v1/subscriptions`): a subscription as it
  * stood at `updatedAt`, so an app can mirror every subscriber's plan and status without polling
  * each organization.
  *
- * `id` is Billing's subscription id and `organizationId` is Billing's organization id. Key your
+ * `id` is Billing's subscription public id (`sub_…`) and `organizationId` is Billing's organization id. Key your
  * own records on `organizationRef`, your tenant key for the organization (the `{org}` you call
  * the other endpoints with), or on {@see organizationKey()}, which falls back to Billing's id for
  * an organization provisioned without one. `plan` and `product` are keys, null when the plan was
@@ -23,7 +23,7 @@ use DateTimeImmutable;
 readonly class SubscriptionChange
 {
     public function __construct(
-        public int $id,
+        public string $id,
         public string $organizationId,
         public ?string $organizationRef,
         public ?string $plan,

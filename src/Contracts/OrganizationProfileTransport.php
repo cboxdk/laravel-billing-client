@@ -19,7 +19,7 @@ use Cbox\Billing\Client\ValueObjects\OrganizationProfile;
 interface OrganizationProfileTransport
 {
     /**
-     * Creates or updates `org` (`PUT /api/v1/organizations/{org}`) and returns what billing stores.
+     * Creates or updates `org` (`PUT /v1/organizations/{org}`) and returns what billing stores.
      *
      * @param  array<string, mixed>  $attributes
      *

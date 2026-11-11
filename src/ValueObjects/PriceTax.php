@@ -10,7 +10,7 @@ use Cbox\Billing\Client\Enums\TaxStatus;
 /**
  * The tax on a price billing shows (a plan, a subscription's recurring charge, a plan change),
  * calculated by Cbox Tax the way the buyer's invoice will be. Read from the `tax` object of
- * `GET /api/v1/plans` and friends.
+ * `GET /v1/plans` and friends.
  *
  * Show {@see $totalMinor}, the amount the buyer pays, rather than taxing a net price yourself.
  * Only a {@see TaxStatus::Calculated} answer carries amounts: on `Pending` and `Unavailable` the

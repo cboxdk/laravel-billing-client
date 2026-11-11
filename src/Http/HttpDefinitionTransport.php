@@ -18,7 +18,7 @@ final readonly class HttpDefinitionTransport implements DefinitionTransport
 
     public function sync(DefinitionManifest $manifest): void
     {
-        $url = rtrim($this->baseUrl, '/').'/api/v1/definitions';
+        $url = rtrim($this->baseUrl, '/').'/definitions';
         $scheme = parse_url($this->baseUrl, PHP_URL_SCHEME);
         $host = parse_url($this->baseUrl, PHP_URL_HOST);
         if ($this->baseUrl === '' || $this->token === '' || ! filter_var($this->baseUrl, FILTER_VALIDATE_URL)
@@ -36,21 +36,21 @@ final readonly class HttpDefinitionTransport implements DefinitionTransport
             throw new BillingUnavailable('Definition synchronization could not reach Billing.');
         }
         if (! $response->successful()) {
-            throw TransportException::fromResponse('/api/v1/definitions', $response);
+            throw TransportException::fromResponse('/definitions', $response);
         }
         $rows = $response->json('data');
         if (! is_array($rows) || ! array_is_list($rows)) {
-            throw TransportException::malformed('/api/v1/definitions', 'missing definition list');
+            throw TransportException::malformed('/definitions', 'missing definition list');
         }
         $actual = [];
         foreach ($rows as $row) {
             if (! is_array($row) || ! is_string($row['kind'] ?? null) || ! is_string($row['key'] ?? null)
                 || ! array_key_exists('retired_at', $row)) {
-                throw TransportException::malformed('/api/v1/definitions', 'invalid definition acknowledgement');
+                throw TransportException::malformed('/definitions', 'invalid definition acknowledgement');
             }
             if ($row['retired_at'] === null) {
                 if (($row['version'] ?? null) !== $manifest->version) {
-                    throw TransportException::malformed('/api/v1/definitions', 'wrong definition version');
+                    throw TransportException::malformed('/definitions', 'wrong definition version');
                 }
                 $actual[] = $row['kind'].':'.$row['key'];
             }
@@ -67,7 +67,7 @@ final readonly class HttpDefinitionTransport implements DefinitionTransport
         sort($actual);
         sort($expected);
         if ($actual !== $expected) {
-            throw TransportException::malformed('/api/v1/definitions', 'Billing did not acknowledge the complete manifest');
+            throw TransportException::malformed('/definitions', 'Billing did not acknowledge the complete manifest');
         }
     }
 }

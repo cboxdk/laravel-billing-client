@@ -54,7 +54,8 @@ source of truth; the SDK enforces a leased slice locally and reports usage.
 - **Credential handling is the host's responsibility.** The bearer token
   (`billing-client.api_token`) is read from configuration — keep it in an environment
   variable / secret store, never commit it. The SDK sends it only to the configured
-  `base_url` over the transport you configure (use HTTPS).
+  API URL (`api_url`, or the deprecated `base_url`) over the transport you configure
+  (use HTTPS).
 - **No cryptography is implemented here.** Transport security is TLS provided by your
   HTTP client; the SDK adds no bespoke crypto.
 - **Supply chain.** Every push runs the CI gate (PHPStan max, Pest, `composer audit`,

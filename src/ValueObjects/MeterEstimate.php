@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * An estimated number of `units` to reserve for one `meter` in an authoritative
- * remote reservation (`POST /api/v1/reserve`).
+ * remote reservation (`POST /v1/reserve`).
  */
 readonly class MeterEstimate
 {

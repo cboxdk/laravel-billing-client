@@ -75,7 +75,7 @@ it('carries the status, body and Retry-After of a refusal', function (): void {
         expect($e->status)->toBe(401)
             ->and($e->body)->toBe('{"error":"Invalid API token."}')
             ->and($e->retryAfter)->toBeNull()
-            ->and($e->endpoint)->toBe('/api/v1/leases')
+            ->and($e->endpoint)->toBe('/leases')
             ->and($e)->toBeInstanceOf(TransportException::class);
     }
 });

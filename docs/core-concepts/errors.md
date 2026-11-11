@@ -23,7 +23,7 @@ Both subclasses expose the same read-only fields:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `endpoint` | `string` | the API path, e.g. `/api/v1/leases` |
+| `endpoint` | `string` | the path under the API URL, e.g. `/leases` |
 | `status` | `?int` | the HTTP status; `null` when no response arrived |
 | `body` | `?string` | the raw response body, e.g. `{"error":"Invalid API token."}` |
 | `retryAfter` | `?int` | the `Retry-After` header in seconds (delta-seconds or an HTTP-date) |

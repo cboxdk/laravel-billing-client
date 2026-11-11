@@ -17,20 +17,20 @@ use Illuminate\Support\Facades\Http;
 
 function limitClient(): BillingManagement
 {
-    return new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'limit-token'));
+    return new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'limit-token'));
 }
 
 function limitWire(): array
 {
     return ['scope' => 'organization', 'monetary_exposure_included' => false, 'limits' => [
         'max_sites' => ['key' => 'max_sites', 'enabled' => true, 'limit' => 20, 'base_limit' => 10,
-            'grant_request_id' => 12, 'source' => 'approved_request', 'expires_at' => '2026-12-06T12:00:00Z', 'observed_at' => '2026-11-06T12:00:00Z'],
+            'grant_request_id' => 'lir_5Rk8wTq3NvX7mB2hYc9LzF', 'source' => 'approved_request', 'expires_at' => '2026-12-06T12:00:00Z', 'observed_at' => '2026-11-06T12:00:00Z'],
     ]];
 }
 
 function increaseWire(): array
 {
-    return ['id' => 12, 'request_key' => '0d01641e-ff77-4465-9ba9-20e372bd5670', 'feature' => 'max_sites', 'status' => 'pending',
+    return ['id' => 'lir_5Rk8wTq3NvX7mB2hYc9LzF', 'request_key' => '0d01641e-ff77-4465-9ba9-20e372bd5670', 'feature' => 'max_sites', 'status' => 'pending',
         'observed_limit' => 10, 'requested_limit' => 30, 'reason' => 'More sites', 'approved_limit' => null, 'decision_reason' => null,
         'decided_at' => null, 'expires_at' => null, 'revoked_at' => null, 'revocation_reason' => null, 'created_at' => '2026-11-06T12:00:00Z'];
 }
@@ -67,7 +67,7 @@ it('submits the durable key and verifies the receipt identifies the same request
     Http::fake(['billing.test/api/v1/organizations/a/limit-increase-requests?product=hosting' => Http::response(increaseWire(), 201)]);
     $input = new LimitIncreaseInput(increaseWire()['request_key'], 'max_sites', 30, 'More sites');
     $receipt = limitClient()->requestLimitIncrease('a', $input, 'hosting');
-    expect($receipt->id)->toBe(12)->and($receipt->status)->toBe('pending');
+    expect($receipt->id)->toBe('lir_5Rk8wTq3NvX7mB2hYc9LzF')->and($receipt->status)->toBe('pending');
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request->data() === $input->toArray());
     Http::fake(['billing.test/*' => Http::response([...increaseWire(), 'requested_limit' => 40])]);
     expect(fn () => limitClient()->requestLimitIncrease('a', $input))->toThrow(BillingUnavailable::class);
@@ -77,12 +77,12 @@ it('paginates requests and verifies cancellation receipts', function (): void {
     Http::preventStrayRequests();
     Http::fake([
         'billing.test/api/v1/organizations/a/limit-increase-requests?page=2' => Http::response(['data' => [increaseWire()], 'current_page' => 2, 'last_page' => 2]),
-        'billing.test/api/v1/organizations/a/limit-increase-requests/12/cancel' => Http::sequence()->push([...increaseWire(), 'status' => 'cancelled'])->push([...increaseWire(), 'id' => 99, 'status' => 'cancelled']),
+        'billing.test/api/v1/organizations/a/limit-increase-requests/lir_5Rk8wTq3NvX7mB2hYc9LzF/cancel' => Http::sequence()->push([...increaseWire(), 'status' => 'cancelled'])->push([...increaseWire(), 'id' => 'lir_9Qw2eRt5yU8iO1pA4sD7fG', 'status' => 'cancelled']),
     ]);
     $page = limitClient()->limitIncreaseRequests('a', 2);
-    expect($page->data[0]->id)->toBe(12)->and($page->currentPage)->toBe(2)
-        ->and(limitClient()->cancelLimitIncrease('a', 12)->status)->toBe('cancelled');
-    expect(fn () => limitClient()->cancelLimitIncrease('a', 12))->toThrow(BillingUnavailable::class);
+    expect($page->data[0]->id)->toBe('lir_5Rk8wTq3NvX7mB2hYc9LzF')->and($page->currentPage)->toBe(2)
+        ->and(limitClient()->cancelLimitIncrease('a', 'lir_5Rk8wTq3NvX7mB2hYc9LzF')->status)->toBe('cancelled');
+    expect(fn () => limitClient()->cancelLimitIncrease('a', 'lir_5Rk8wTq3NvX7mB2hYc9LzF'))->toThrow(BillingUnavailable::class);
 });
 
 it('preserves unavailable and refused responses', function (int $status, string $exception): void {
@@ -95,7 +95,7 @@ it('rejects invalid inputs before sending a request', function (): void {
     expect(fn () => new LimitIncreaseInput('invalid', 'sites', 30, 'Reason'))->toThrow(InvalidArgumentException::class);
     expect(fn () => new LimitIncreaseInput(increaseWire()['request_key'], 'sites', 0, 'Reason'))->toThrow(InvalidArgumentException::class);
     expect(fn () => limitClient()->resourceLimits(''))->toThrow(InvalidArgumentException::class);
-    expect(fn () => limitClient()->cancelLimitIncrease('a', 0))->toThrow(InvalidArgumentException::class);
+    expect(fn () => limitClient()->cancelLimitIncrease('a', ' '))->toThrow(InvalidArgumentException::class);
     expect(fn () => limitClient()->limitIncreaseRequests('a', 0))->toThrow(InvalidArgumentException::class);
     Http::assertNothingSent();
 });

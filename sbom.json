@@ -1,7 +1,7 @@
 {
     "bomFormat": "CycloneDX",
     "specVersion": "1.5",
-    "serialNumber": "urn:uuid:32765ab7-060a-480e-b07a-8fb25edcf567",
+    "serialNumber": "urn:uuid:27c3dc85-6b11-4429-8b05-009c09e07606",
     "version": 1,
     "metadata": {
         "tools": [
@@ -229,11 +229,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/laravel/framework@v13.39.0",
+            "bom-ref": "pkg:composer/laravel/framework@v13.42.0",
             "group": "laravel",
             "name": "framework",
-            "version": "v13.39.0",
-            "purl": "pkg:composer/laravel/framework@v13.39.0",
+            "version": "v13.42.0",
+            "purl": "pkg:composer/laravel/framework@v13.42.0",
             "description": "The Laravel Framework.",
             "licenses": [
                 {
@@ -245,11 +245,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/laravel/prompts@v0.3.26",
+            "bom-ref": "pkg:composer/laravel/prompts@v0.3.27",
             "group": "laravel",
             "name": "prompts",
-            "version": "v0.3.26",
-            "purl": "pkg:composer/laravel/prompts@v0.3.26",
+            "version": "v0.3.27",
+            "purl": "pkg:composer/laravel/prompts@v0.3.27",
             "description": "Add beautiful and user-friendly forms to your command-line applications.",
             "licenses": [
                 {
@@ -261,11 +261,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/laravel/serializable-closure@v2.1.0",
+            "bom-ref": "pkg:composer/laravel/serializable-closure@v2.2.0",
             "group": "laravel",
             "name": "serializable-closure",
-            "version": "v2.1.0",
-            "purl": "pkg:composer/laravel/serializable-closure@v2.1.0",
+            "version": "v2.2.0",
+            "purl": "pkg:composer/laravel/serializable-closure@v2.2.0",
             "description": "Laravel Serializable Closure provides an easy and secure way to serialize closures in PHP.",
             "licenses": [
                 {
@@ -357,11 +357,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/league/uri@7.9.1",
+            "bom-ref": "pkg:composer/league/uri@7.10.0",
             "group": "league",
             "name": "uri",
-            "version": "7.9.1",
-            "purl": "pkg:composer/league/uri@7.9.1",
+            "version": "7.10.0",
+            "purl": "pkg:composer/league/uri@7.10.0",
             "description": "URI manipulation library",
             "licenses": [
                 {
@@ -373,11 +373,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/league/uri-interfaces@7.9.1",
+            "bom-ref": "pkg:composer/league/uri-interfaces@7.10.0",
             "group": "league",
             "name": "uri-interfaces",
-            "version": "7.9.1",
-            "purl": "pkg:composer/league/uri-interfaces@7.9.1",
+            "version": "7.10.0",
+            "purl": "pkg:composer/league/uri-interfaces@7.10.0",
             "description": "Common tools for parsing and resolving RFC3987/RFC3986 URI",
             "licenses": [
                 {
@@ -449,11 +449,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/nunomaduro/termwind@v2.4.0",
+            "bom-ref": "pkg:composer/nunomaduro/termwind@v2.4.1",
             "group": "nunomaduro",
             "name": "termwind",
-            "version": "v2.4.0",
-            "purl": "pkg:composer/nunomaduro/termwind@v2.4.0",
+            "version": "v2.4.1",
+            "purl": "pkg:composer/nunomaduro/termwind@v2.4.1",
             "description": "It's like Tailwind CSS, but for the console.",
             "licenses": [
                 {
@@ -657,11 +657,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/console@v8.1.10",
+            "bom-ref": "pkg:composer/symfony/console@v8.1.11",
             "group": "symfony",
             "name": "console",
-            "version": "v8.1.10",
-            "purl": "pkg:composer/symfony/console@v8.1.10",
+            "version": "v8.1.11",
+            "purl": "pkg:composer/symfony/console@v8.1.11",
             "description": "Eases the creation of beautiful and testable command line interfaces",
             "licenses": [
                 {
@@ -689,11 +689,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/deprecation-contracts@v3.7.1",
+            "bom-ref": "pkg:composer/symfony/deprecation-contracts@v3.8.1",
             "group": "symfony",
             "name": "deprecation-contracts",
-            "version": "v3.7.1",
-            "purl": "pkg:composer/symfony/deprecation-contracts@v3.7.1",
+            "version": "v3.8.1",
+            "purl": "pkg:composer/symfony/deprecation-contracts@v3.8.1",
             "description": "A generic function and convention to trigger deprecation notices",
             "licenses": [
                 {
@@ -737,11 +737,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/event-dispatcher-contracts@v3.7.1",
+            "bom-ref": "pkg:composer/symfony/event-dispatcher-contracts@v3.8.1",
             "group": "symfony",
             "name": "event-dispatcher-contracts",
-            "version": "v3.7.1",
-            "purl": "pkg:composer/symfony/event-dispatcher-contracts@v3.7.1",
+            "version": "v3.8.1",
+            "purl": "pkg:composer/symfony/event-dispatcher-contracts@v3.8.1",
             "description": "Generic abstractions related to dispatching event",
             "licenses": [
                 {
@@ -753,11 +753,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/finder@v8.1.10",
+            "bom-ref": "pkg:composer/symfony/finder@v8.1.11",
             "group": "symfony",
             "name": "finder",
-            "version": "v8.1.10",
-            "purl": "pkg:composer/symfony/finder@v8.1.10",
+            "version": "v8.1.11",
+            "purl": "pkg:composer/symfony/finder@v8.1.11",
             "description": "Finds files and directories via an intuitive fluent interface",
             "licenses": [
                 {
@@ -1057,11 +1057,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/service-contracts@v3.7.3",
+            "bom-ref": "pkg:composer/symfony/service-contracts@v3.8.1",
             "group": "symfony",
             "name": "service-contracts",
-            "version": "v3.7.3",
-            "purl": "pkg:composer/symfony/service-contracts@v3.7.3",
+            "version": "v3.8.1",
+            "purl": "pkg:composer/symfony/service-contracts@v3.8.1",
             "description": "Generic abstractions related to writing services",
             "licenses": [
                 {
@@ -1089,11 +1089,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/translation@v8.1.10",
+            "bom-ref": "pkg:composer/symfony/translation@v8.1.11",
             "group": "symfony",
             "name": "translation",
-            "version": "v8.1.10",
-            "purl": "pkg:composer/symfony/translation@v8.1.10",
+            "version": "v8.1.11",
+            "purl": "pkg:composer/symfony/translation@v8.1.11",
             "description": "Provides tools to internationalize your application",
             "licenses": [
                 {
@@ -1105,11 +1105,11 @@
         },
         {
             "type": "library",
-            "bom-ref": "pkg:composer/symfony/translation-contracts@v3.7.1",
+            "bom-ref": "pkg:composer/symfony/translation-contracts@v3.8.1",
             "group": "symfony",
             "name": "translation-contracts",
-            "version": "v3.7.1",
-            "purl": "pkg:composer/symfony/translation-contracts@v3.7.1",
+            "version": "v3.8.1",
+            "purl": "pkg:composer/symfony/translation-contracts@v3.8.1",
             "description": "Generic abstractions related to translation",
             "licenses": [
                 {

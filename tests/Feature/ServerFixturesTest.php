@@ -56,12 +56,12 @@ function replaying(string $fixture): HttpFactory
 
 function enforcementReplaying(string $fixture): HttpBillingTransport
 {
-    return new HttpBillingTransport(replaying($fixture), 'https://billing.test', 'token');
+    return new HttpBillingTransport(replaying($fixture), 'https://billing.test/api/v1', 'token');
 }
 
 function managementReplaying(string $fixture): HttpManagementTransport
 {
-    return new HttpManagementTransport(replaying($fixture), 'https://billing.test', 'token');
+    return new HttpManagementTransport(replaying($fixture), 'https://billing.test/api/v1', 'token');
 }
 
 it('parses every recorded enforcement response', function (): void {
@@ -216,7 +216,7 @@ function seededManagementFake(): FakeManagementTransport
         ->withUsage('org_a', 'api.calls', new MeterUsage(750, 1_000, 0))
         ->withInvoice('org_a', new Invoice('CB-1', $start, 2_500, 'EUR', 'paid'))
         ->withIssuedInvoice('org_a', new IssuedInvoice(
-            'CB-1', $start, 1_875_000, 'DKK', 'open', 1_500_000, 375_000, 17,
+            'CB-1', $start, 1_875_000, 'DKK', 'open', 1_500_000, 375_000, 'inv_7Hq2kV9xTq3LmN0pR4sW1z',
             [new IssuedInvoiceLine('Consulting', '12.500', 't', 120_000, 1_500_000, 375_000, 1_875_000)],
             ['title' => 'Specification', 'columns' => [['key' => 'hours', 'label' => 'Hours', 'align' => 'right']], 'rows' => [['1,00']], 'footer' => ['1,00']],
             ['work_invoice_id' => 'inv_1'], 'https://billing.test/invoices/CB-1/pdf?signature=abc', 'live',

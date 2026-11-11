@@ -13,14 +13,30 @@ composer require cboxdk/laravel-billing-client
 
 ```dotenv
 # .env
-BILLING_CLIENT_BASE_URL=https://billing.internal
+BILLING_CLIENT_API_URL=https://api.cboxbilling.com/v1
 BILLING_CLIENT_API_TOKEN=your-service-token
 BILLING_CLIENT_LEASE_SIZE=100
 BILLING_CLIENT_FAIL=last_known
 ```
 
-With a base URL and token set, the provider binds the HTTP transport and the
-`BillingClient` automatically.
+`BILLING_CLIENT_API_URL` is Billing's API host with its version: `https://api.cboxbilling.com/v1`
+for the hosted service, `https://<api host>/v1` for a Billing with `CBOX_BILLING_API_HOST` set.
+With a token set, the provider binds the HTTP transport and the `BillingClient` automatically.
+
+### Upgrading to 0.6
+
+Billing v2 serves its API on its own host and gives every object a public id.
+
+- **Env:** replace `BILLING_CLIENT_BASE_URL=https://app.cboxbilling.com` with
+  `BILLING_CLIENT_API_URL=https://api.cboxbilling.com/v1`. Until you do, the old setting keeps
+  working: the client calls `{BILLING_CLIENT_BASE_URL}/api/v1`, which Billing still answers
+  (with `Deprecation` headers).
+- **Ids are strings:** `IssuedInvoice::$id` (`inv_…`), `SubscriptionChange::$id` (`sub_…`),
+  `LimitIncrease::$id` and `ResourceLimit::$grantRequestId` (`lir_…`) and
+  `InvoiceRefundResult::$approvalId` (`apr_…`). `cancelLimitIncrease()` takes the string id.
+  Store them in string columns; Billing answers a numeric id with a 404.
+
+See the [changelog](CHANGELOG.md) for the full list.
 
 ## Use
 
