@@ -46,9 +46,11 @@ Schedule::command('billing:report-usage')->everyMinute();
 
 ## Bring your own transport
 
-Without a base URL and token the HTTP transport has nothing to talk to. Bind your own
-implementation of `Cbox\Billing\Client\Contracts\BillingTransport` in a service
-provider to point the SDK at a different endpoint or to stub it out.
+With no URL configured, the HTTP transports call the hosted API
+(`https://api.cboxbilling.com/v1`), and without a token Billing refuses every call. To run
+without Billing, or to point the SDK at something else, bind your own implementation of
+`Cbox\Billing\Client\Contracts\BillingTransport` (and `ManagementTransport`) in a service
+provider, or use the fakes in tests.
 
 ## Upgrading to 0.6
 

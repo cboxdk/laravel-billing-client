@@ -21,6 +21,9 @@ Billing v2: the API has its own host, and every id is a string.
   `/v1` or `/api/v1`) as its `baseUrl`, not the app root.
 - `TransportException::$endpoint` is the path under the API URL (`/leases`, was
   `/api/v1/leases`).
+- **No URL now means the hosted API.** With neither `api_url` nor `base_url` set, the transports
+  used to call an empty URL and fail; they now call `https://api.cboxbilling.com/v1`. An app that
+  runs without Billing must not set a Billing token, or must bind its own transports.
 - The fakes hand out public ids (`Testing\FakePublicId`), and the subscription change feed's
   fake cursor carries the string id.
 
