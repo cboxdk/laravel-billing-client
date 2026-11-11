@@ -62,7 +62,7 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
         ], $this->leaseTimeout);
 
         return new LeaseGrant(
-            leaseId: $this->stringField($body, 'lease_id', '/leases'),
+            leaseId: WireId::from($body['lease_id'] ?? null) ?? throw TransportException::malformed('/leases', 'missing id field [lease_id]'),
             org: $org,
             meter: $meter,
             granted: $this->intField($body, 'granted', '/leases'),
@@ -93,7 +93,7 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
 
         return new RemoteReservation(
             outcome: ReserveOutcome::fromWire($body['outcome'] ?? null),
-            reservationId: $this->optionalStringField($body, 'reservation_id'),
+            reservationId: WireId::from($body['reservation_id'] ?? null),
             reason: $this->optionalStringField($body, 'reason'),
         );
     }
@@ -229,20 +229,6 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
 
         /** @var array<string, mixed> $body */
         return $body;
-    }
-
-    /**
-     * @param  array<string, mixed>  $body
-     */
-    private function stringField(array $body, string $key, string $path): string
-    {
-        $value = $body[$key] ?? null;
-
-        if (! is_string($value) || $value === '') {
-            throw TransportException::malformed($path, "missing string field [{$key}]");
-        }
-
-        return $value;
     }
 
     /**

@@ -8,6 +8,11 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 Billing v2: the API has its own host, and every id is a string.
 
+**Works against both Billing versions.** Every id the client reads accepts the public id of
+Billing v2 (`inv_…`) and the positive integer of Billing before v2 (`17`, handed on as `"17"`),
+and an app that sets only `BILLING_CLIENT_BASE_URL` keeps calling `{base_url}/api/v1`, which both
+answer. Bump the apps first, then deploy Billing v2.
+
 ### Changed (breaking)
 
 - **Ids are strings.** Billing v2 gives every object that leaves it a public id, `{prefix}_`
@@ -29,8 +34,9 @@ Billing v2: the API has its own host, and every id is a string.
 
 ### Added
 
-- `api_url` (`BILLING_CLIENT_API_URL`, or `CBOX_BILLING_API_URL`): Billing's API with its version.
+- `api_url` (`BILLING_CLIENT_API_URL`): Billing's API with its version.
   With nothing set, the client uses the hosted `https://api.cboxbilling.com/v1`.
+- `Http\WireId`: reads an id off the wire as a string, from a public id or an old integer id.
 - `Http\ApiUrl`: resolves the API URL. `ApiUrl::fromConfig(config())` gives an app the same URL
   for the calls it makes to Billing itself.
 

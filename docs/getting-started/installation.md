@@ -22,7 +22,7 @@ php artisan vendor:publish --tag=billing-client-config
 
 | Key | Env | Purpose |
 | --- | --- | --- |
-| `api_url` | `BILLING_CLIENT_API_URL` (or `CBOX_BILLING_API_URL`) | Billing's API with its version: `https://api.cboxbilling.com/v1` (the default when nothing is set), or `https://<api host>/v1`. Every call appends its path (`…/v1/leases`). |
+| `api_url` | `BILLING_CLIENT_API_URL` | Billing's API with its version: `https://api.cboxbilling.com/v1` (the default when nothing is set), or `https://<api host>/v1`. Every call appends its path (`…/v1/leases`). |
 | `base_url` | `BILLING_CLIENT_BASE_URL` | **Deprecated.** The Billing app root (`https://app.cboxbilling.com`); the client calls `{base_url}/api/v1`. Used only when `api_url` is empty. |
 | `api_token` | `BILLING_CLIENT_API_TOKEN` | Bearer token for the transport. |
 | `timeout` | `BILLING_CLIENT_TIMEOUT` | Request timeout in seconds (default 5). |
@@ -56,6 +56,10 @@ provider, or use the fakes in tests.
 
 Billing v2 serves its API on its own host at `/v1` and gives every object that leaves it a
 public id: `{prefix}_` plus 22 base62 characters (`inv_…`, `sub_…`, `lir_…`, `apr_…`).
+
+0.6 works against Billing before v2 too: an id sent as a number (`17`) arrives as the string
+`"17"`, and the old `BILLING_CLIENT_BASE_URL` keeps working. Upgrade the app first; Billing v2
+can deploy after.
 
 1. Bump the constraint: `"cboxdk/laravel-billing-client": "^0.6"`.
 2. Change env:

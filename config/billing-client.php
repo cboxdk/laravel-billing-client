@@ -22,7 +22,7 @@ return [
     |
     */
 
-    'api_url' => env('BILLING_CLIENT_API_URL', env('CBOX_BILLING_API_URL')),
+    'api_url' => env('BILLING_CLIENT_API_URL'),
 
     // Deprecated: the app root; `/api/v1` is appended. Use `api_url`.
     'base_url' => env('BILLING_CLIENT_BASE_URL'),

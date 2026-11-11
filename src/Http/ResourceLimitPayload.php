@@ -29,7 +29,7 @@ class ResourceLimitPayload
             }
             $limit = self::integer($row['limit'] ?? null, $path);
             $base = self::integer($row['base_limit'] ?? null, $path);
-            $grant = self::nullableString($row, 'grant_request_id', $path);
+            $grant = self::nullableId($row, 'grant_request_id', $path);
             $source = self::string($row['source'] ?? null, $path);
             $expires = self::date($row, 'expires_at', $path, true);
             $observed = self::date($row, 'observed_at', $path);
@@ -70,7 +70,7 @@ class ResourceLimitPayload
     /** @param array<array-key, mixed> $row */
     public static function request(array $row, string $path): LimitIncrease
     {
-        $id = self::string($row['id'] ?? null, $path);
+        $id = WireId::from($row['id'] ?? null) ?? throw TransportException::malformed($path, 'missing request id');
         $status = self::string($row['status'] ?? null, $path);
         $requested = self::integer($row['requested_limit'] ?? null, $path);
         $approved = self::nullableInteger($row, 'approved_limit', $path);
@@ -107,6 +107,20 @@ class ResourceLimitPayload
         }
 
         return $row[$key] === null ? null : self::integer($row[$key], $path);
+    }
+
+    /**
+     * An id that must be present but may be null; a number (Billing before v2) becomes a string.
+     *
+     * @param  array<array-key, mixed>  $row
+     */
+    private static function nullableId(array $row, string $key, string $path): ?string
+    {
+        if (! array_key_exists($key, $row)) {
+            throw TransportException::malformed($path, 'missing '.$key);
+        }
+
+        return $row[$key] === null ? null : (WireId::from($row[$key]) ?? throw TransportException::malformed($path, 'invalid '.$key));
     }
 
     private static function string(mixed $value, string $path): string

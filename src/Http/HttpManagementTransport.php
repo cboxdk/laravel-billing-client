@@ -176,7 +176,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         $validated = $raw['tax_id_validated'] ?? null;
 
         return new OrganizationProfile(
-            id: $this->stringField($raw, 'id', $path),
+            id: $this->idField($raw, 'id', $path),
             externalRef: $text('external_ref'),
             name: $this->stringOr($raw, 'name', ''),
             billingEmail: $text('billing_email'),
@@ -585,7 +585,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             $this->stringOr($raw, 'status', 'open'),
             TaxPayload::int($raw['subtotal_minor'] ?? null),
             TaxPayload::int($raw['tax_minor'] ?? null),
-            $this->stringField($raw, 'id', $path),
+            $this->idField($raw, 'id', $path),
             $lines,
             $appendix,
             $metadata,
@@ -669,7 +669,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         $body = $this->postWithHeaders($path, $payload, ['Idempotency-Key' => $idempotencyKey]);
         $refund = $body['refund'] ?? null;
 
-        return new InvoiceRefundResult($this->stringField($body, 'status', $path), is_array($refund) && is_string($refund['id'] ?? null) ? $refund['id'] : null, is_string($body['approval'] ?? null) && $body['approval'] !== '' ? $body['approval'] : null);
+        return new InvoiceRefundResult($this->stringField($body, 'status', $path), is_array($refund) ? WireId::from($refund['id'] ?? null) : null, WireId::from($body['approval'] ?? null));
     }
 
     /** @param array<string, mixed> $body */
@@ -681,12 +681,12 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         }
 
         return new OneOffQuote(
-            $this->stringField($body, 'id', $path), $this->stringField($body, 'organization', $path),
+            $this->idField($body, 'id', $path), $this->idField($body, 'organization', $path),
             $this->stringField($body, 'reference', $path), $this->stringField($body, 'product', $path),
             $this->intField($body, 'quantity', $path), $this->stringField($body, 'currency', $path),
             $this->intField($body, 'net_minor', $path), $this->intField($body, 'tax_minor', $path),
             $this->intField($body, 'total_minor', $path), $this->stringField($body, 'price_version', $path),
-            $expiresAt, $this->stringField($body, 'status', $path), is_string($body['invoice'] ?? null) ? $body['invoice'] : null,
+            $expiresAt, $this->stringField($body, 'status', $path), WireId::from($body['invoice'] ?? null),
             $this->stringField($body, 'payment_status', $path),
         );
     }
@@ -816,7 +816,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         foreach ($rawMethods as $raw) {
             if (is_array($raw)) {
                 $methods[] = new PaymentMethod(
-                    id: $this->stringField($raw, 'id', $path),
+                    id: $this->idField($raw, 'id', $path),
                     brand: $this->stringOr($raw, 'brand', ''),
                     last4: $this->stringOr($raw, 'last4', ''),
                     expMonth: $this->intOr($raw, 'exp_month', 0),
@@ -975,8 +975,8 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
     private function toSubscriptionChange(array $raw, string $path): SubscriptionChange
     {
         return new SubscriptionChange(
-            id: $this->stringField($raw, 'id', $path),
-            organizationId: $this->stringField($raw, 'organization_id', $path),
+            id: $this->idField($raw, 'id', $path),
+            organizationId: $this->idField($raw, 'organization_id', $path),
             organizationRef: $this->nullableString($raw, 'organization_ref'),
             plan: $this->nullableString($raw, 'plan'),
             product: $this->nullableString($raw, 'product'),
@@ -1015,7 +1015,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             publishableKey: $this->stringOr($raw, 'publishable_key', ''),
             clientSecret: is_string($raw['client_secret'] ?? null) ? (string) $raw['client_secret'] : null,
             status: $this->stringOr($raw, 'status', ''),
-            reference: $this->stringOr($raw, 'reference', $this->stringOr($raw, 'id', '')),
+            reference: $this->stringOr($raw, 'reference', WireId::from($raw['id'] ?? null) ?? ''),
         );
     }
 
@@ -1255,6 +1255,14 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         } catch (Throwable) {
             return null;
         }
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $body
+     */
+    private function idField(array $body, string $key, string $path): string
+    {
+        return WireId::from($body[$key] ?? null) ?? throw TransportException::malformed($path, "missing id field [{$key}]");
     }
 
     /**
