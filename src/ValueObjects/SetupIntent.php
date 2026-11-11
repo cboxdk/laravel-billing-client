@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\ValueObjects;
 
 /**
- * A gateway setup intent from the management API (`POST /api/v1/setup-intents`) for the
+ * A gateway setup intent from the management API (`POST /v1/setup-intents`) for the
  * embedded payment flow: it lets the product app collect and store a payment method
  * without an immediate charge. The service is gateway-agnostic, so it returns the
  * `gateway` identifier and `publishableKey` the front-end needs to load the gateway's

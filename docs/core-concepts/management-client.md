@@ -41,7 +41,7 @@ $invoices = BillingManager::invoices('org_42');         // list<Invoice>
 `subscribe`, `changePlan`, and checkout all act on an organization that must already
 exist on the billing service — calling them for an unknown org throws a
 `BillingRefused` (404 "Unknown organization"). `ensureOrganization($org, $attributes)`
-is an idempotent upsert (`PUT /api/v1/organizations/{org}`); call it once before the
+is an idempotent upsert (`PUT /v1/organizations/{org}`); call it once before the
 first billing action for a customer. It's the first step in every cookbook below.
 
 To show what billing stores (an app's own billing page), use `upsertOrganization($org,
@@ -149,25 +149,25 @@ Like the enforcement path, the network lives behind one contract — `Management
 
 | Method | Endpoint |
 | --- | --- |
-| `plans()` | `GET /api/v1/plans` |
-| `subscription($org)` | `GET /api/v1/subscriptions/{org}` |
-| `subscribe($org, $plan)` | `POST /api/v1/subscriptions` |
-| `previewChange($org, $plan)` | `POST /api/v1/subscriptions/{org}/preview` |
-| `changePlan($org, $plan)` | `POST /api/v1/subscriptions/{org}/change` |
-| `cancel($org, $atPeriodEnd)` | `POST /api/v1/subscriptions/{org}/cancel` |
-| `reactivate($org)` ¹ | `POST /api/v1/subscriptions/{org}/reactivate` |
-| `subscriptions(?$updatedSince, ?$cursor, ?$limit)` ¹ | `GET /api/v1/subscriptions` |
-| `usage($org)` | `GET /api/v1/usage/{org}` |
-| `invoices($org)` | `GET /api/v1/invoices/{org}` |
-| `createInvoice($org, $invoice, $idempotencyKey)` ² | `POST /api/v1/invoices/{org}` |
-| `invoice($org, $number)` ² | `GET /api/v1/invoices/{org}/{number}` |
-| `createCheckoutSession($org, $plan, $returnUrl, ?$currency)` | `POST /api/v1/checkout-sessions` |
-| `createPortalSession($org, $returnUrl)` | `POST /api/v1/portal-sessions` |
-| `createSetupIntent($org)` | `POST /api/v1/setup-intents` |
-| `createPaymentIntent($org, ?$reference, ?$amountMinor, ?$currency)` | `POST /api/v1/payment-intents` |
-| `paymentMethods($org)` | `GET /api/v1/payment-methods/{org}` |
-| `setDefaultPaymentMethod($org, $id)` | `POST /api/v1/payment-methods/{org}/default` |
-| `removePaymentMethod($org, $id)` | `DELETE /api/v1/payment-methods/{org}/{id}` |
+| `plans()` | `GET /v1/plans` |
+| `subscription($org)` | `GET /v1/subscriptions/{org}` |
+| `subscribe($org, $plan)` | `POST /v1/subscriptions` |
+| `previewChange($org, $plan)` | `POST /v1/subscriptions/{org}/preview` |
+| `changePlan($org, $plan)` | `POST /v1/subscriptions/{org}/change` |
+| `cancel($org, $atPeriodEnd)` | `POST /v1/subscriptions/{org}/cancel` |
+| `reactivate($org)` ¹ | `POST /v1/subscriptions/{org}/reactivate` |
+| `subscriptions(?$updatedSince, ?$cursor, ?$limit)` ¹ | `GET /v1/subscriptions` |
+| `usage($org)` | `GET /v1/usage/{org}` |
+| `invoices($org)` | `GET /v1/invoices/{org}` |
+| `createInvoice($org, $invoice, $idempotencyKey)` ² | `POST /v1/invoices/{org}` |
+| `invoice($org, $number)` ² | `GET /v1/invoices/{org}/{number}` |
+| `createCheckoutSession($org, $plan, $returnUrl, ?$currency)` | `POST /v1/checkout-sessions` |
+| `createPortalSession($org, $returnUrl)` | `POST /v1/portal-sessions` |
+| `createSetupIntent($org)` | `POST /v1/setup-intents` |
+| `createPaymentIntent($org, ?$reference, ?$amountMinor, ?$currency)` | `POST /v1/payment-intents` |
+| `paymentMethods($org)` | `GET /v1/payment-methods/{org}` |
+| `setDefaultPaymentMethod($org, $id)` | `POST /v1/payment-methods/{org}/default` |
+| `removePaymentMethod($org, $id)` | `DELETE /v1/payment-methods/{org}/{id}` |
 
 ¹ Added in 0.4.2 on a separate contract, `SubscriptionTransport`, so a transport you wrote
 against 0.4.1 still compiles. `HttpManagementTransport` and `FakeManagementTransport`
@@ -213,7 +213,7 @@ $issued->pdfUrl;    // signed, expires in 15 minutes
   `unitAmountMinor` is a positive integer in the account's billing currency.
 - The `$idempotencyKey` is required. Use your own record's id: a retry with the same key and body
   returns the same invoice, the same key with another body is a 409 `idempotency_conflict`.
-  `IssuedInvoice::$id` is billing's integer id.
+  `IssuedInvoice::$id` is billing's public id, a string (`inv_…`).
 - `metadata` is flat strings: at most 20 keys, each key at most 40 characters matching
   `[A-Za-z0-9_.-]`, each value at most 200 characters. It is returned on read and in the
   `invoice.issued` webhook.
@@ -384,7 +384,7 @@ rows does not activate event collection or billing.
 ### Raw usage events
 
 `BillingManagement::ingestUsageEvents($org, $events)` sends 1–1,000 `UsageEvent`
-objects through `POST /api/v1/events`. The optional `UsageEventTransport` contract
+objects through `POST /v1/events`. The optional `UsageEventTransport` contract
 keeps existing custom transports compatible; a transport without it raises
 `UnsupportedOperation`.
 

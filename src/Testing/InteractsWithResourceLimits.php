@@ -19,7 +19,7 @@ trait InteractsWithResourceLimits
     /** @var array<string, array<string, ResourceLimit>> */
     private array $resourceCeilings = [];
 
-    /** @var array<string, array<int, LimitIncrease>> */
+    /** @var array<string, array<string, LimitIncrease>> */
     private array $resourceRequests = [];
 
     private int $resourceRequestSequence = 0;
@@ -75,17 +75,17 @@ trait InteractsWithResourceLimits
         if ($limit === null || ! $limit->enabled || $request->requestedLimit <= $limit->limit) {
             throw TransportException::status('/limit-increase-requests', 422);
         }
-        $id = ++$this->resourceRequestSequence;
+        $id = FakePublicId::make('lir', ++$this->resourceRequestSequence);
 
         return $this->resourceRequests[$scope][$id] = new LimitIncrease($id, $request->requestKey, $request->feature, 'pending',
             $limit->limit, $request->requestedLimit, $request->reason, createdAt: new DateTimeImmutable);
     }
 
-    public function cancelLimitIncrease(string $org, int $requestId, ?string $product = null): LimitIncrease
+    public function cancelLimitIncrease(string $org, string $requestId, ?string $product = null): LimitIncrease
     {
         $this->resourceAvailability();
-        if ($requestId < 1) {
-            throw new InvalidArgumentException('The request id must be positive.');
+        if (trim($requestId) === '') {
+            throw new InvalidArgumentException('The request id must not be empty.');
         }
         $scope = $this->resourceScope($org, $product);
         $request = $this->resourceRequests[$scope][$requestId] ?? throw TransportException::status('/limit-increase-requests', 404);

@@ -14,11 +14,12 @@ the background. See [Kept answers](../core-concepts/kept-answers.md) for the rul
 ## Configure
 
 ```dotenv
-BILLING_CLIENT_BASE_URL=https://billing.cbox.dk
+BILLING_CLIENT_API_URL=https://api.cboxbilling.com/v1
 BILLING_CLIENT_API_TOKEN=...
 BILLING_CLIENT_SERVICE=cbox-telemetry       # your service key in Billing
 # A token with the access:enroll scope. Falls back to CBOX_SERVICE_ACCESS_URL / _TOKEN,
-# then to BILLING_CLIENT_BASE_URL / _API_TOKEN.
+# then to BILLING_CLIENT_API_URL / _API_TOKEN. A URL not ending in /v1 is read as the
+# old Billing app root and gets /api/v1.
 BILLING_CLIENT_ACCESS_URL=
 BILLING_CLIENT_ACCESS_TOKEN=
 ```
@@ -30,7 +31,7 @@ Run a queue worker. The background refresh is a queued job.
 Before, a middleware asked Billing on every page:
 
 ```php
-// POST /api/v1/access/services/{service}/check, every page
+// POST /v1/access/services/{service}/check, every page
 $allowed = $admissions->allowedFor($user->id, $organization->id);
 ```
 

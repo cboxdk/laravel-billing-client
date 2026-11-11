@@ -7,7 +7,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 use DateTimeImmutable;
 
 /**
- * A hosted-checkout session from the management API (`POST /api/v1/checkout-sessions`):
+ * A hosted-checkout session from the management API (`POST /v1/checkout-sessions`):
  * the `url` the product app redirects the user to so billing collects payment on its own
  * pages, and `expiresAt` — the moment the session link stops being valid. Sessions are
  * short-lived; mint a fresh one per attempt rather than caching the URL.

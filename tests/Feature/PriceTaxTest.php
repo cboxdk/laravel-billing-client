@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Http;
  */
 function taxedHttp(): HttpManagementTransport
 {
-    return new HttpManagementTransport(app(HttpFactory::class), 'https://billing.test', 'secret-token');
+    return new HttpManagementTransport(app(HttpFactory::class), 'https://billing.test/api/v1', 'secret-token');
 }
 
 /** @return array<string, mixed> */

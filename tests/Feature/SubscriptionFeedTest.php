@@ -45,8 +45,13 @@ function percentDiscount(): array
 /** @return array<string, mixed> */
 function feedRow(int $id, string $ref, array $overrides = []): array
 {
+    return feedRowWith('sub_'.str_pad((string) $id, 22, '0', STR_PAD_LEFT), $id, $ref, $overrides);
+}
+
+function feedRowWith(string $publicId, int $id, string $ref, array $overrides = []): array
+{
     return array_merge([
-        'id' => $id,
+        'id' => $publicId,
         'organization_id' => '01JBX7Q3W9T0S2M4V6Y8Z1A3C'.$id,
         'organization_ref' => $ref,
         'plan' => 'pro',
@@ -188,7 +193,7 @@ it('reads a page of the change feed and sends the watermark, cursor and limit', 
     $first = $page->data[0];
 
     expect($first)->toBeInstanceOf(SubscriptionChange::class)
-        ->and($first->id)->toBe(42)
+        ->and($first->id)->toBe('sub_0000000000000000000042')
         ->and($first->organizationId)->toBe('01JBX7Q3W9T0S2M4V6Y8Z1A3C42')
         ->and($first->organizationRef)->toBe('tenant-42')
         ->and($first->organizationKey())->toBe('tenant-42')

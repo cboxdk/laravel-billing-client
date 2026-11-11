@@ -101,7 +101,7 @@ it('sends the product and locale to the bundles endpoint and the mode to the can
             ? HttpFactory::response(['organization' => 'org_a', 'currency' => 'EUR', 'locale' => 'da', 'active' => [], 'offers' => []])
             : HttpFactory::response(['mode' => 'immediate', 'ends_at' => null, 'consequences' => []]);
     });
-    $transport = new HttpManagementTransport($http, 'https://billing.test', 'token');
+    $transport = new HttpManagementTransport($http, 'https://billing.test/api/v1', 'token');
 
     $transport->bundles('org a', 'cbox-tax', 'da');
     $transport->previewCancel('org_a', false, 'da');
@@ -115,13 +115,13 @@ it('sends the product and locale to the bundles endpoint and the mode to the can
 it('refuses a bundles answer without its lists as malformed', function (): void {
     $http = (new HttpFactory)->fake(['*' => HttpFactory::response(['organization' => 'org_a', 'currency' => 'EUR', 'locale' => 'en'])]);
 
-    expect(fn () => (new HttpManagementTransport($http, 'https://billing.test', 'token'))->bundles('org_a'))
+    expect(fn () => (new HttpManagementTransport($http, 'https://billing.test/api/v1', 'token'))->bundles('org_a'))
         ->toThrow(TransportException::class, 'missing active array');
 });
 
 it('reads an older server that sends no bundle fields', function (): void {
     $http = (new HttpFactory)->fake(['*' => HttpFactory::response(['plan' => 'pro', 'status' => 'active'])]);
-    $subscription = (new HttpManagementTransport($http, 'https://billing.test', 'token'))->subscription('org_a');
+    $subscription = (new HttpManagementTransport($http, 'https://billing.test/api/v1', 'token'))->subscription('org_a');
 
     expect($subscription?->bundle)->toBeNull()
         ->and($subscription?->pendingChange)->toBeNull()

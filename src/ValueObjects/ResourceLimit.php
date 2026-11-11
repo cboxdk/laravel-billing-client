@@ -7,7 +7,10 @@ namespace Cbox\Billing\Client\ValueObjects;
 use DateTimeImmutable;
 use InvalidArgumentException;
 
-/** An observed resource ceiling, not a capacity reservation, price or credit allowance. */
+/**
+ * An observed resource ceiling, not a capacity reservation, price or credit allowance.
+ * `grantRequestId` is the public id (`lir_…`) of the approved request that sets it, or null.
+ */
 readonly class ResourceLimit
 {
     public function __construct(
@@ -15,7 +18,7 @@ readonly class ResourceLimit
         public bool $enabled = false,
         public int $limit = 0,
         public int $baseLimit = 0,
-        public ?int $grantRequestId = null,
+        public ?string $grantRequestId = null,
         public ?DateTimeImmutable $expiresAt = null,
         public string $source = 'catalog',
         public ?DateTimeImmutable $observedAt = null,

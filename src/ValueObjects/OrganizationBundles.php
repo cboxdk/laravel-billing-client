@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * Everything an app shows about bundles for one organization
- * (`GET /api/v1/organizations/{org}/bundles`): the benefits on its subscriptions (`active`) and
+ * (`GET /v1/organizations/{org}/bundles`): the benefits on its subscriptions (`active`) and
  * what it could add to save (`offers`), with copy in `locale` and prices in `currency`. `product`
  * is the product the answer was narrowed to (a product-bound token's own).
  */

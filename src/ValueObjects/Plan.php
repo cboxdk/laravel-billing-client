@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\ValueObjects;
 
 /**
- * A subscribable plan from the management API (`GET /api/v1/plans`): its stable `key`,
+ * A subscribable plan from the management API (`GET /v1/plans`): its stable `key`,
  * display `name`, recurring `priceMinor` in the smallest currency unit (e.g. cents)
  * under `currency`, the billing `interval` (e.g. `month`/`year`), the set of
  * meter `entitlements` the plan grants, and its boolean/config `features`. Prices are

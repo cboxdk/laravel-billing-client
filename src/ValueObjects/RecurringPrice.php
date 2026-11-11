@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * What a subscription costs per period as its invoice bills it now (`recurring` on
- * `GET /api/v1/subscriptions/{org}`): `netMinor` is the plan for its seats less the bundle benefit
+ * `GET /v1/subscriptions/{org}`): `netMinor` is the plan for its seats less the bundle benefit
  * and the coupon, without add-ons or metered usage, and `tax` the tax on it for the organization.
  * Show `tax->totalMinor` when the tax is calculated.
  */

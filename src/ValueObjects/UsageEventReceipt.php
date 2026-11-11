@@ -20,7 +20,7 @@ readonly class UsageEventReceipt
      */
     public static function fromResponse(array $body, array $events): self
     {
-        $bad = static fn (): TransportException => TransportException::malformed('/api/v1/events', 'inconsistent usage event receipt');
+        $bad = static fn (): TransportException => TransportException::malformed('/events', 'inconsistent usage event receipt');
         $accepted = $body['accepted'] ?? null;
         $duplicates = $body['duplicates'] ?? null;
         $rows = $body['rejected'] ?? null;

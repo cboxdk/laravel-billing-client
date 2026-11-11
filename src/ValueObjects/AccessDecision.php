@@ -8,7 +8,7 @@ use Cbox\Billing\Client\Access\ServiceAccess;
 
 /**
  * Billing's answer to "may this person (in this organization) use the service?"
- * (`POST /api/v1/access/services/{service}/check`): `allowed`, and Billing's `reason` code
+ * (`POST /v1/access/services/{service}/check`): `allowed`, and Billing's `reason` code
  * when it says no (e.g. `waitlisted`). {@see ServiceAccess} keeps it as {@see toArray()}.
  * `new AccessDecision` is a valid instance: a refusal with no reason.
  */

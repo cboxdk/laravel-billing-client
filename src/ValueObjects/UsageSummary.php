@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * An organization's per-meter usage for the current period
- * (`GET /api/v1/usage/{org}`): a map of meter name to {@see MeterUsage} plus the
+ * (`GET /v1/usage/{org}`): a map of meter name to {@see MeterUsage} plus the
  * {@see BillingPeriod} the figures cover. Deny-by-default: an unknown meter has no
  * entry and {@see for()} returns null rather than a fabricated zero.
  */

@@ -55,24 +55,24 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
      */
     public function lease(string $org, string $meter, int $size): LeaseGrant
     {
-        $body = $this->post('/api/v1/leases', [
+        $body = $this->post('/leases', [
             'org' => $org,
             'meter' => $meter,
             'size' => $size,
         ], $this->leaseTimeout);
 
         return new LeaseGrant(
-            leaseId: $this->stringField($body, 'lease_id', '/api/v1/leases'),
+            leaseId: $this->stringField($body, 'lease_id', '/leases'),
             org: $org,
             meter: $meter,
-            granted: $this->intField($body, 'granted', '/api/v1/leases'),
+            granted: $this->intField($body, 'granted', '/leases'),
             expiresAt: $this->epochMs($body['expires_at'] ?? null),
         );
     }
 
     public function reportUsage(string $org, array $entries): void
     {
-        $this->post('/api/v1/usage', [
+        $this->post('/usage', [
             'org' => $org,
             'entries' => array_map(
                 static fn (CumulativeUsage $entry): array => $entry->toEntry(),
@@ -83,7 +83,7 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
 
     public function reserve(string $org, array $meters): RemoteReservation
     {
-        $body = $this->post('/api/v1/reserve', [
+        $body = $this->post('/reserve', [
             'org' => $org,
             'meters' => array_map(
                 static fn (MeterEstimate $estimate): array => $estimate->toArray(),
@@ -100,7 +100,7 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
 
     public function commit(string $reservationId, array $actuals): void
     {
-        $this->post('/api/v1/commit', [
+        $this->post('/commit', [
             'reservation_id' => $reservationId,
             'actuals' => array_map(
                 static fn (MeterActual $actual): array => $actual->toArray(),
@@ -111,7 +111,7 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
 
     public function entitlements(string $org): Entitlements
     {
-        $body = $this->get('/api/v1/entitlements/'.rawurlencode($org));
+        $body = $this->get('/entitlements/'.rawurlencode($org));
 
         $rawMeters = $body['meters'] ?? null;
         $meters = [];
@@ -140,7 +140,7 @@ class HttpBillingTransport implements BillingTransport, FeatureReader, FeatureTr
     public function features(string $organization): FeatureEntitlements
     {
         $org = $organization;
-        $path = '/api/v1/entitlements/'.rawurlencode($org).'/features';
+        $path = '/entitlements/'.rawurlencode($org).'/features';
         $body = $this->get($path);
         $raw = $body['features'] ?? null;
         $account = $body['account'] ?? null;

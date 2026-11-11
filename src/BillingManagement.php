@@ -356,7 +356,7 @@ class BillingManagement
         return $this->transport->requestLimitIncrease($org, $request, $product);
     }
 
-    public function cancelLimitIncrease(string $org, int $requestId, ?string $product = null): LimitIncrease
+    public function cancelLimitIncrease(string $org, string $requestId, ?string $product = null): LimitIncrease
     {
         if (! $this->transport instanceof ResourceLimitTransport) {
             throw UnsupportedOperation::missingContract($this->transport, ResourceLimitTransport::class, __FUNCTION__);

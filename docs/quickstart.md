@@ -14,14 +14,17 @@ composer require cboxdk/laravel-billing-client
 
 ```dotenv
 # .env
-BILLING_CLIENT_BASE_URL=https://billing.internal
+BILLING_CLIENT_API_URL=https://api.cboxbilling.com/v1
 BILLING_CLIENT_API_TOKEN=your-service-token
 BILLING_CLIENT_LEASE_SIZE=100
 BILLING_CLIENT_FAIL=last_known
 ```
 
-With a base URL and token set, the service provider binds the HTTP transport and the
-`BillingClient` automatically.
+`BILLING_CLIENT_API_URL` is Billing's API host with its version (`https://api.cboxbilling.com/v1`
+for the hosted service). With a token set, the service provider binds the HTTP transport and the
+`BillingClient` automatically. An app that still sets the old `BILLING_CLIENT_BASE_URL` (the
+Billing app root) keeps working through `{base_url}/api/v1`; see
+[Installation](getting-started/installation.md#upgrading-to-06).
 
 ## 2. Enforce on the hot path
 

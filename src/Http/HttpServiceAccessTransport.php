@@ -12,7 +12,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 
 /**
- * Asks `POST /api/v1/access/services/{service}/check` with a product-bound token carrying the
+ * Asks `POST /v1/access/services/{service}/check` with a product-bound token carrying the
  * `access:enroll` scope. The base URL must be https (http only for localhost), without
  * credentials, query or fragment; an unconfigured or unsafe target is refused before any
  * request is made. The answer must carry a boolean `allowed`; anything else is malformed.
@@ -29,7 +29,7 @@ class HttpServiceAccessTransport implements ServiceAccessTransport
 
     public function check(string $service, string $subject, ?string $organization = null): AccessDecision
     {
-        $path = '/api/v1/access/services/'.rawurlencode($service).'/check';
+        $path = '/access/services/'.rawurlencode($service).'/check';
 
         if ($service === '' || $subject === '' || ! $this->safeTarget()) {
             throw new BillingRefused('Service access needs a service key, a subject, an https Billing URL and an access token.', $path);

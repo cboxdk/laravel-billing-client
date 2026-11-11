@@ -13,7 +13,7 @@ function makeHttpTransport(): HttpBillingTransport
 {
     return new HttpBillingTransport(
         app(HttpFactory::class),
-        'https://billing.test',
+        'https://billing.test/api/v1',
         'secret-token',
     );
 }

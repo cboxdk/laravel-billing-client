@@ -19,5 +19,5 @@ interface ResourceLimitTransport
 
     public function requestLimitIncrease(string $org, LimitIncreaseInput $request, ?string $product = null): LimitIncrease;
 
-    public function cancelLimitIncrease(string $org, int $requestId, ?string $product = null): LimitIncrease;
+    public function cancelLimitIncrease(string $org, string $requestId, ?string $product = null): LimitIncrease;
 }

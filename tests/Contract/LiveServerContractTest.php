@@ -7,6 +7,7 @@ use Cbox\Billing\Client\BillingManagement;
 use Cbox\Billing\Client\Buffers\ArrayUsageBuffer;
 use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\Http\ApiUrl;
 use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Cbox\Billing\Client\Leasing\LeaseManager;
@@ -64,12 +65,12 @@ function contractOrg(): string
 
 function contractManagement(?string $token = null): HttpManagementTransport
 {
-    return new HttpManagementTransport(new HttpFactory, contractUrl(), $token ?? contractToken(), 15);
+    return new HttpManagementTransport(new HttpFactory, ApiUrl::fromLegacy(contractUrl()), $token ?? contractToken(), 15);
 }
 
 function contractEnforcement(?string $token = null): HttpBillingTransport
 {
-    return new HttpBillingTransport(new HttpFactory, contractUrl(), $token ?? contractToken(), 15);
+    return new HttpBillingTransport(new HttpFactory, ApiUrl::fromLegacy(contractUrl()), $token ?? contractToken(), 15);
 }
 
 /**

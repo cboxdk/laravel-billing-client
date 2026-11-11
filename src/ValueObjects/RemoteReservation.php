@@ -8,7 +8,7 @@ use Cbox\Billing\Client\Enums\ReserveOutcome;
 
 /**
  * The decision returned by an authoritative remote reservation
- * (`POST /api/v1/reserve`). On `Allowed` it carries the billing-side
+ * (`POST /v1/reserve`). On `Allowed` it carries the billing-side
  * `reservationId` to later commit; on `Denied`/`Indeterminate` it may carry a
  * human-readable `reason`.
  */

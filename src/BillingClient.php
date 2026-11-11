@@ -261,7 +261,7 @@ class BillingClient
     }
 
     /**
-     * The authoritative synchronous reservation path (`POST /api/v1/reserve`) — a
+     * The authoritative synchronous reservation path (`POST /v1/reserve`) — a
      * round-trip to billing for callers that need a central decision rather than the
      * leased hot path. Pair with {@see commitRemote()}.
      *
@@ -275,7 +275,7 @@ class BillingClient
     }
 
     /**
-     * Settle an authoritative remote reservation (`POST /api/v1/commit`).
+     * Settle an authoritative remote reservation (`POST /v1/commit`).
      *
      * @param  list<MeterActual>  $actuals
      *
@@ -287,7 +287,7 @@ class BillingClient
     }
 
     /**
-     * Read `org`'s entitlement set from billing (`GET /api/v1/entitlements/{org}`).
+     * Read `org`'s entitlement set from billing (`GET /v1/entitlements/{org}`).
      *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */

@@ -6,8 +6,8 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * A gateway payment intent from the management API — returned both when subscribing
- * requires an up-front charge (`POST /api/v1/subscriptions`) and when the embedded flow
- * charges directly (`POST /api/v1/payment-intents`). The service is gateway-agnostic, so
+ * requires an up-front charge (`POST /v1/subscriptions`) and when the embedded flow
+ * charges directly (`POST /v1/payment-intents`). The service is gateway-agnostic, so
  * it relays the `gateway` identifier and `publishableKey` the front-end needs to load
  * the gateway's own element, the `clientSecret` that element confirms against, the
  * current `status` (e.g. `requires_confirmation`, or `requires_action` when strong

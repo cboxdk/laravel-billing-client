@@ -8,7 +8,7 @@ use DateTimeImmutable;
 
 /**
  * An organization's current subscription from the management API
- * (`GET /api/v1/subscriptions/{org}` and the mutating endpoints): the subscribed plan
+ * (`GET /v1/subscriptions/{org}` and the mutating endpoints): the subscribed plan
  * `key`, its `status` (e.g. `active`, `trialing`, `past_due`, `canceled`), the current
  * period bounds, and `renewsAt` (null once the subscription is set to cancel at period
  * end). Dates are parsed to immutable values off the wire.

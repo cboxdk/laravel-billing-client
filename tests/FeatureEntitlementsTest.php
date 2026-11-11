@@ -39,7 +39,7 @@ it('rechecks revocations and account suspension on every read', function (): voi
 
 it('fails closed on malformed feature responses', function (array $body): void {
     Http::fake(['*' => Http::response($body)]);
-    (new HttpBillingTransport(app(Factory::class), 'https://billing.test', 'secret'))->features('org_a');
+    (new HttpBillingTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret'))->features('org_a');
 })->with([
     'missing features' => [['account' => ['suspended' => false]]],
     'missing account' => [['features' => []]],
@@ -50,7 +50,7 @@ it('fails closed on malformed feature responses', function (array $body): void {
 
 it('uses the scoped API path and refuses redirects without forwarding credentials', function (): void {
     Http::fake(['*' => Http::response('', 302, ['Location' => 'https://outside.test'])]);
-    expect(fn () => (new HttpBillingTransport(app(Factory::class), 'https://billing.test', 'secret'))->features('org/a'))->toThrow(BillingUnavailable::class);
+    expect(fn () => (new HttpBillingTransport(app(Factory::class), 'https://billing.test/api/v1', 'secret'))->features('org/a'))->toThrow(BillingUnavailable::class);
     Http::assertSentCount(1);
     Http::assertSent(fn ($request): bool => $request->url() === 'https://billing.test/api/v1/entitlements/org%2Fa/features' && $request->hasHeader('Authorization', 'Bearer secret'));
 });

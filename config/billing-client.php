@@ -9,13 +9,22 @@ return [
     | Remote billing service
     |--------------------------------------------------------------------------
     |
-    | The base URL of the Cbox Billing service this app leases allowance from and
-    | reports usage to, plus the bearer token the transport authenticates with. When
-    | either is empty the HTTP transport is not bound and the app must bind its own
-    | BillingTransport (e.g. the in-memory fake in tests).
+    | `api_url` is the Billing API this app leases allowance from and reports usage
+    | to: the API host with its version, `https://api.cboxbilling.com/v1` for the
+    | hosted service, `https://<api host>/v1` for one with CBOX_BILLING_API_HOST set.
+    | Every call appends its path to it (`…/v1/leases`). `api_token` is the bearer
+    | token the transports authenticate with.
+    |
+    | `base_url` is the old setting: the Billing APP root (`https://app.cboxbilling.com`),
+    | to which the client appends `/api/v1`. It is used only when `api_url` is empty, so
+    | an app keeps working until it changes env; that address answers with Deprecation
+    | headers. With neither set, the hosted API is used.
     |
     */
 
+    'api_url' => env('BILLING_CLIENT_API_URL', env('CBOX_BILLING_API_URL')),
+
+    // Deprecated: the app root; `/api/v1` is appended. Use `api_url`.
     'base_url' => env('BILLING_CLIENT_BASE_URL'),
 
     'api_token' => env('BILLING_CLIENT_API_TOKEN'),
@@ -81,11 +90,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | The per-page "may this person use the service?" check
-    | (`POST /api/v1/access/services/{service}/check`), answered by
+    | (`POST /v1/access/services/{service}/check`), answered by
     | Cbox\Billing\Client\Access\ServiceAccess from a kept answer. `service` is this app's
     | service key in Billing. The token needs the `access:enroll` scope; the URL and token
     | fall back to the CBOX_SERVICE_ACCESS_* variables apps already set, then to
-    | `base_url` and `api_token`.
+    | `api_url` and `api_token`. A `url` that does not end in `/v1` is taken as the old
+    | app root and gets `/api/v1`.
     |
     */
 

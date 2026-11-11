@@ -22,7 +22,8 @@ php artisan vendor:publish --tag=billing-client-config
 
 | Key | Env | Purpose |
 | --- | --- | --- |
-| `base_url` | `BILLING_CLIENT_BASE_URL` | Billing service base URL. Empty → no HTTP transport is usable; bind your own. |
+| `api_url` | `BILLING_CLIENT_API_URL` (or `CBOX_BILLING_API_URL`) | Billing's API with its version: `https://api.cboxbilling.com/v1` (the default when nothing is set), or `https://<api host>/v1`. Every call appends its path (`…/v1/leases`). |
+| `base_url` | `BILLING_CLIENT_BASE_URL` | **Deprecated.** The Billing app root (`https://app.cboxbilling.com`); the client calls `{base_url}/api/v1`. Used only when `api_url` is empty. |
 | `api_token` | `BILLING_CLIENT_API_TOKEN` | Bearer token for the transport. |
 | `timeout` | `BILLING_CLIENT_TIMEOUT` | Request timeout in seconds (default 5). |
 | `lease_size` | `BILLING_CLIENT_LEASE_SIZE` | Units leased per refill. Larger → fewer round-trips, more overshoot. |
@@ -48,3 +49,35 @@ Schedule::command('billing:report-usage')->everyMinute();
 Without a base URL and token the HTTP transport has nothing to talk to. Bind your own
 implementation of `Cbox\Billing\Client\Contracts\BillingTransport` in a service
 provider to point the SDK at a different endpoint or to stub it out.
+
+## Upgrading to 0.6
+
+Billing v2 serves its API on its own host at `/v1` and gives every object that leaves it a
+public id: `{prefix}_` plus 22 base62 characters (`inv_…`, `sub_…`, `lir_…`, `apr_…`).
+
+1. Bump the constraint: `"cboxdk/laravel-billing-client": "^0.6"`.
+2. Change env:
+
+   ```dotenv
+   # before
+   BILLING_CLIENT_BASE_URL=https://app.cboxbilling.com
+   # after
+   BILLING_CLIENT_API_URL=https://api.cboxbilling.com/v1
+   ```
+
+   Until you change it, the old setting keeps working: the client calls
+   `{BILLING_CLIENT_BASE_URL}/api/v1`, which the Billing app host still answers with
+   `Deprecation` and `Link` headers. A `BILLING_CLIENT_ACCESS_URL` (or
+   `CBOX_SERVICE_ACCESS_URL`) that does not end in `/v1` is read the same way.
+3. Treat ids as strings. `IssuedInvoice::$id`, `SubscriptionChange::$id`, `LimitIncrease::$id`,
+   `ResourceLimit::$grantRequestId` and `InvoiceRefundResult::$approvalId` are strings, and
+   `cancelLimitIncrease()` takes one. If your app stores any of them, make the column a string
+   (`varchar(64)` is enough) and re-read the rows from Billing: a numeric id gets a 404.
+4. `TransportException::$endpoint` is now the path under the API URL (`/leases`, not
+   `/api/v1/leases`). Update anything that matches on it.
+5. Code that calls Billing itself (outside this client) builds its URLs on
+   `Cbox\Billing\Client\Http\ApiUrl::fromConfig(config())`, the URL the client uses, instead of
+   `config('billing-client.base_url').'/api/v1'`. Keep `BILLING_CLIENT_BASE_URL` set until no code
+   reads `billing-client.base_url` any more: `api_url` wins when both are set.
+6. Code that reads Billing's webhooks or events directly (outside this client) must dedupe on
+   the new string event ids and read `dispute.*` ids as `dsp_…`.

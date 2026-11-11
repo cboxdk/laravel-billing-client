@@ -12,7 +12,7 @@ function paymentsHttp(): HttpManagementTransport
 {
     return new HttpManagementTransport(
         app(HttpFactory::class),
-        'https://billing.test',
+        'https://billing.test/api/v1',
         'secret-token',
     );
 }

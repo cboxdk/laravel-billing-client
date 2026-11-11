@@ -29,12 +29,12 @@ class ResourceLimitPayload
             }
             $limit = self::integer($row['limit'] ?? null, $path);
             $base = self::integer($row['base_limit'] ?? null, $path);
-            $grant = self::nullableInteger($row, 'grant_request_id', $path);
+            $grant = self::nullableString($row, 'grant_request_id', $path);
             $source = self::string($row['source'] ?? null, $path);
             $expires = self::date($row, 'expires_at', $path, true);
             $observed = self::date($row, 'observed_at', $path);
             if (! in_array($source, ['catalog', 'approved_request'], true) || (! $row['enabled'] && $limit !== 0)
-                || ($source === 'approved_request' && ($grant === null || $grant < 1 || $limit <= $base))
+                || ($source === 'approved_request' && ($grant === null || $limit <= $base))
                 || ($source === 'catalog' && ($grant !== null || $expires !== null || $limit !== $base))
                 || ($expires !== null && $expires <= $observed)) {
                 throw TransportException::malformed($path, 'inconsistent resource ceiling');
@@ -70,13 +70,13 @@ class ResourceLimitPayload
     /** @param array<array-key, mixed> $row */
     public static function request(array $row, string $path): LimitIncrease
     {
-        $id = self::integer($row['id'] ?? null, $path);
+        $id = self::string($row['id'] ?? null, $path);
         $status = self::string($row['status'] ?? null, $path);
         $requested = self::integer($row['requested_limit'] ?? null, $path);
         $approved = self::nullableInteger($row, 'approved_limit', $path);
         $decided = self::date($row, 'decided_at', $path, true);
         $key = self::string($row['request_key'] ?? null, $path);
-        if ($id < 1 || $requested < 1 || ! in_array($status, ['pending', 'approved', 'rejected', 'cancelled'], true)
+        if ($requested < 1 || ! in_array($status, ['pending', 'approved', 'rejected', 'cancelled'], true)
             || ! preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iD', $key)
             || ($status === 'approved' && ($approved === null || $approved < 1 || $approved > $requested || $decided === null))
             || ($status !== 'approved' && $approved !== null)) {

@@ -18,7 +18,7 @@ use Illuminate\Http\Client\Request;
 
 function profileClient(HttpFactory $http): BillingManagement
 {
-    return new BillingManagement(new HttpManagementTransport($http, 'https://billing.test', 'token', 5));
+    return new BillingManagement(new HttpManagementTransport($http, 'https://billing.test/api/v1', 'token', 5));
 }
 
 it('returns what billing stores for the organization', function (): void {

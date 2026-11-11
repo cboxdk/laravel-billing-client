@@ -16,7 +16,7 @@ it('keeps caller identities on retried subscription mutations', function (): voi
         'billing.test/api/v1/subscriptions/org/change' => Http::response(['due_now_minor' => 0, 'credit_minor' => 0, 'new_recurring_minor' => 100, 'lines' => []]),
         'billing.test/api/v1/subscriptions/org/*' => Http::response(['plan' => 'team', 'status' => 'active']),
     ]);
-    $client = new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'test-secret'));
+    $client = new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'test-secret'));
     for ($i = 0; $i < 2; $i++) {
         $client->subscribe('org', 'team', idempotencyKey: 'subscribe-stable');
         $client->changePlan('org', 'team', idempotencyKey: 'change-stable');
@@ -36,7 +36,7 @@ it('refuses unsupported idempotency instead of silently dropping the key', funct
 
 it('refuses an empty key before contacting billing', function (): void {
     Http::fake();
-    $client = new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'test-secret'));
+    $client = new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'test-secret'));
     expect(fn () => $client->subscribe('org', 'team', ''))->toThrow(InvalidArgumentException::class);
     Http::assertNothingSent();
 });

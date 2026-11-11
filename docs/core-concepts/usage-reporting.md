@@ -16,7 +16,7 @@ durable append can be lost.
 ## Cumulative, not delta
 
 The buffer holds a **monotonically increasing** total per `(org, meter)`, and the
-`UsageReporter` sends that running total (`POST /api/v1/usage`), not a per-flush delta.
+`UsageReporter` sends that running total (`POST /v1/usage`), not a per-flush delta.
 Billing keeps the **highest** cumulative it has seen per node and meter.
 
 This makes reporting **self-correcting**:

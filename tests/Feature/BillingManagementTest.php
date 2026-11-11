@@ -276,7 +276,7 @@ it('refuses a replayed key with a different body, as the server does', function 
 
 it('serves a seeded issued invoice and 404s an unknown number', function (): void {
     $this->managementTransport()->withIssuedInvoice('org_a', new IssuedInvoice(
-        'INV-9', null, 12500, 'DKK', 'open', 10000, 2500, 9,
+        'INV-9', null, 12500, 'DKK', 'open', 10000, 2500, 'inv_0000000000000000000009',
         [new IssuedInvoiceLine('Work', '1.000', null, 10000, 10000, 2500, 12500)], null, [], null, 'live',
     ));
     $management = $this->makeBillingManagement();

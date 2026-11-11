@@ -7,7 +7,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 use DateTimeImmutable;
 
 /**
- * A dry-run of a plan change (`POST /api/v1/subscriptions/{org}/preview`) so a product
+ * A dry-run of a plan change (`POST /v1/subscriptions/{org}/preview`) so a product
  * app can show the user exactly what switching plans costs before committing: the net
  * `dueNowMinor` charge, any prorated `creditMinor` applied, the `newRecurringMinor`
  * amount going forward, when the change takes `effectiveAt`, and the itemized `lines`.

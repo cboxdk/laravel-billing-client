@@ -7,7 +7,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 use DateTimeImmutable;
 
 /**
- * A historical invoice from the management API (`GET /api/v1/invoices/{org}`): its
+ * A historical invoice from the management API (`GET /v1/invoices/{org}`): its
  * `number`, issue `date`, `amountMinor` in the smallest unit of `currency`, and
  * `status` (e.g. `paid`, `open`, `void`). Amounts are integer minor units.
  *

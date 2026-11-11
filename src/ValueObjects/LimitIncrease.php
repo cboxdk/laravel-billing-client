@@ -6,11 +6,14 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 use DateTimeImmutable;
 
-/** Cheap scripted receipt for tests; its status alone is never an admission decision. */
+/**
+ * Cheap scripted receipt for tests; its status alone is never an admission decision. `id` is the
+ * request's public id (`lir_…`).
+ */
 readonly class LimitIncrease
 {
     public function __construct(
-        public int $id = 0,
+        public string $id = '',
         public string $requestKey = '',
         public string $feature = '',
         public string $status = 'pending',

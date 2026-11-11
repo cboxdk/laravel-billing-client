@@ -4,6 +4,56 @@ All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a mi
 release may change behaviour, and every such change is listed with an upgrade note.
 
 
+## [0.6.0] - 2026-11-11
+
+Billing v2: the API has its own host, and every id is a string.
+
+### Changed (breaking)
+
+- **Ids are strings.** Billing v2 gives every object that leaves it a public id, `{prefix}_`
+  plus 22 base62 characters, and answers an old numeric id with a 404. These are now strings:
+  `IssuedInvoice::$id` (`inv_…`), `SubscriptionChange::$id` (`sub_…`), `LimitIncrease::$id` and
+  `ResourceLimit::$grantRequestId` (`lir_…`), `InvoiceRefundResult::$approvalId` (`apr_…`).
+  `cancelLimitIncrease(string $org, string $requestId, ...)` takes the string id (on
+  `BillingManagement`, `ResourceLimitTransport` and the fakes).
+- **API host.** The transports append their paths to a versioned API URL:
+  `https://api.cboxbilling.com/v1` + `/leases`. A transport built by hand takes that URL (with
+  `/v1` or `/api/v1`) as its `baseUrl`, not the app root.
+- `TransportException::$endpoint` is the path under the API URL (`/leases`, was
+  `/api/v1/leases`).
+- The fakes hand out public ids (`Testing\FakePublicId`), and the subscription change feed's
+  fake cursor carries the string id.
+
+### Added
+
+- `api_url` (`BILLING_CLIENT_API_URL`, or `CBOX_BILLING_API_URL`): Billing's API with its version.
+  With nothing set, the client uses the hosted `https://api.cboxbilling.com/v1`.
+- `Http\ApiUrl`: resolves the API URL. `ApiUrl::fromConfig(config())` gives an app the same URL
+  for the calls it makes to Billing itself.
+
+### Deprecated
+
+- `base_url` (`BILLING_CLIENT_BASE_URL`), the Billing app root. When `api_url` is empty the client
+  still calls `{base_url}/api/v1`, which Billing's app host answers with `Deprecation` and `Link`
+  headers. A `service_access.url` that does not end in `/v1` is read the same way.
+
+### Upgrade
+
+1. `"cboxdk/laravel-billing-client": "^0.6"`.
+2. Env, keeping the old line until the app's own code no longer reads `billing-client.base_url`:
+
+   ```dotenv
+   BILLING_CLIENT_API_URL=https://api.cboxbilling.com/v1
+   BILLING_CLIENT_BASE_URL=https://app.cboxbilling.com
+   ```
+
+3. Store any id from Billing in a string column; re-read rows that hold a numeric id.
+4. Replace hand-built `config('billing-client.base_url').'/api/v1/…'` calls with
+   `ApiUrl::fromConfig(config()).'/…'`.
+5. Apps that read Billing webhooks or events themselves: event ids changed shape (dedupe on the new
+   ones), `dispute.*` ids are `dsp_…` with the gateway id in `dispute_reference`, waitlist programs
+   are `acp_…`. See `docs/getting-started/installation.md#upgrading-to-06`.
+
 ## [0.5.0] - 2026-11-09
 
 Pages no longer wait on Billing, and a Billing outage no longer takes them down.

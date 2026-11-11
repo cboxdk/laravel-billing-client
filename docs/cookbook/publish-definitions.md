@@ -25,7 +25,7 @@ an operator still chooses which plans and customers receive each feature or allo
 Both lists are required, even when empty. Keys start with the product's Billing key and
 a dot. Unknown fields, including pricing, plan and assignment fields, are rejected.
 
-Configure `BILLING_CLIENT_BASE_URL` and `BILLING_CLIENT_DEFINITION_TOKEN` in the deployment's
+Configure `BILLING_CLIENT_API_URL` and `BILLING_CLIENT_DEFINITION_TOKEN` in the deployment's
 secret store. The definition token must be bound to this product and environment and hold
 `definitions:write`. It is separate from the runtime enforcement credential.
 

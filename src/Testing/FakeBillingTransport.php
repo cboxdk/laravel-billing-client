@@ -219,7 +219,7 @@ class FakeBillingTransport implements BillingTransport, FeatureReader, FeatureTr
 
         $segments = array_map(
             rawurldecode(...),
-            explode('/', trim((string) preg_replace('#^/?api/v1/?#', '', $path), '/')),
+            explode('/', trim((string) preg_replace('#^/?(?:api/)?v1/?#', '', $path), '/')),
         );
 
         return match (true) {

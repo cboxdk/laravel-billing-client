@@ -18,10 +18,10 @@ it('uses the durable quote accept payment and compensation contracts without sup
         'billing.test/api/v1/one-off-quotes/quote_1/accept' => Http::response([...$quote, 'status' => 'accepted', 'invoice' => 'INV-1', 'payment_status' => 'unpaid']),
         'billing.test/api/v1/one-off-quotes/quote_1/payment-intent' => Http::response(['gateway' => 'stripe', 'publishable_key' => 'pk_test', 'client_secret' => 'cs_test', 'status' => 'requires_payment_method', 'reference' => 'INV-1']),
         'billing.test/api/v1/one-off-quotes/quote_1/cancel' => Http::response([...$quote, 'status' => 'cancelled', 'payment_status' => 'void']),
-        'billing.test/api/v1/invoices/org_1/INV-1/refunds' => Http::response(['status' => 'pending_approval', 'approval' => 42], 202),
+        'billing.test/api/v1/invoices/org_1/INV-1/refunds' => Http::response(['status' => 'pending_approval', 'approval' => 'apr_3VbN7mQ2xLk9JhG4fD1sZa'], 202),
         'billing.test/api/v1/one-off-quotes/*' => Http::response([...$quote, 'invoice' => 'INV-1', 'payment_status' => 'paid']),
     ]);
-    $client = new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test', 'test-secret'));
+    $client = new BillingManagement(new HttpManagementTransport(app(Factory::class), 'https://billing.test/api/v1', 'test-secret'));
     expect($client->createOneOffQuote('org_1', 'order:1', 'domains.register.com', 'create-1', 'DKK')->totalMinor)->toBe(14875);
     expect($client->acceptOneOffQuote('org_1', 'quote_1', 'accept-1')->invoice)->toBe('INV-1');
     expect($client->createOneOffQuotePaymentIntent('org_1', 'quote_1')->clientSecret)->toBe('cs_test');
@@ -29,7 +29,7 @@ it('uses the durable quote accept payment and compensation contracts without sup
     expect($client->oneOffQuoteByReference('org_1', 'order:1')->reference)->toBe('order:1');
     expect($client->reconcileOneOffQuote('org_1', 'quote_1')->paymentStatus)->toBe('paid');
     expect($client->cancelOneOffQuote('org_1', 'quote_1', 'cancel-1')->paymentStatus)->toBe('void');
-    expect($client->refundInvoice('org_1', 'INV-1', 'refund-1', 'service_issue')->approvalId)->toBe(42);
+    expect($client->refundInvoice('org_1', 'INV-1', 'refund-1', 'service_issue')->approvalId)->toBe('apr_3VbN7mQ2xLk9JhG4fD1sZa');
     Http::assertSent(fn (Request $r): bool => $r->hasHeader('Idempotency-Key', 'create-1') && $r['reference'] === 'order:1' && ! isset($r['amount_minor']));
     Http::assertSent(fn (Request $r): bool => $r->hasHeader('Idempotency-Key', 'cancel-1') && $r['org'] === 'org_1');
     Http::assertSent(fn (Request $r): bool => $r->hasHeader('Idempotency-Key', 'refund-1') && $r['reason'] === 'service_issue');
