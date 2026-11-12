@@ -6,7 +6,7 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
-## 0.6.2 — 2026-11-12
+## [0.6.2] - 2026-11-12
 
 No call signature changes; an app on `^0.6` gets it by `composer update`.
 The kept-answer rules change as listed under Changed.
