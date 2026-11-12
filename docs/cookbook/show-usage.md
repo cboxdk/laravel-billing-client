@@ -74,5 +74,5 @@ foreach ($invoices as $invoice) {
 Amounts are integer **minor units** — format for display at the edge, never as floats.
 
 Keep `id` when you store or link an invoice: it is Billing's public id and never changes, while
-`number` is the customer-facing number. It is null only from a server older than the one that
-sends it.
+`number` is the customer-facing number. It is an empty string only from a server older than the
+one that sends it.

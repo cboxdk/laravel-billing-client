@@ -12,8 +12,7 @@ use DateTimeImmutable;
  * `metadata`, a signed, time-limited `pdfUrl` and the `environment` it was issued in
  * (`live` or `sandbox`).
  *
- * Since 0.6.3 `id` is declared on {@see Invoice} (nullable there, for an older server's list);
- * an issued invoice always has one, since the constructor requires it.
+ * Since 0.6.3 `id` is declared on {@see Invoice}; an issued invoice is always given one.
  */
 readonly class IssuedInvoice extends Invoice
 {

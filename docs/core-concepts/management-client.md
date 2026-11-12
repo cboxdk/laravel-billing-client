@@ -144,8 +144,8 @@ coupon, `tax`, and `totalMinor()`), a change preview splits what is due now
 (`dueNowMinor` includes tax, `dueNowNetMinor`, `dueNowTaxMinor`, `dueNowTax`) and taxes the new
 price (`newRecurringTax`), and an invoice has `subtotalMinor` and `taxMinor` beside its total
 `amountMinor`. Since 0.6.3 a listed `Invoice` also carries `id`, Billing's public id (`inv_…`):
-the stable handle to link or store, where `number` is what the customer reads. It is null from a
-server that does not send it.
+the stable handle to link or store, where `number` is what the customer reads. It is an empty
+string from a server that does not send it (an older Billing).
 
 Naming a buyer needs a transport that implements `Contracts\TaxedPlanTransport`, as the HTTP
 transport and the fake do; `plans()` throws `UnsupportedOperation` otherwise. The tax depends on the

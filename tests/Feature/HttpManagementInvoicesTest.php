@@ -112,7 +112,7 @@ it('carries the public id of each listed invoice', function (): void {
 
     expect($invoices[0]->id)->toBe('inv_7Hq2kV9xTq3LmN0pR4sW1z')
         ->and($invoices[0]->number)->toBe('CB-2')
-        ->and($invoices[1]->id)->toBeNull();
+        ->and($invoices[1]->id)->toBe('');
 });
 
 it('lists an id for every invoice in the fake: the seeded one, or a stable stand-in', function (): void {
@@ -125,5 +125,6 @@ it('lists an id for every invoice in the fake: the seeded one, or a stable stand
 
     expect($first[0]->id)->toBe('inv_seeded')
         ->and($first[1]->id)->toStartWith('inv_')
+        ->and($first[1]->id)->toHaveLength(26)
         ->and($first[1]->id)->toBe($again[1]->id);
 });

@@ -13,7 +13,8 @@ use DateTimeImmutable;
  *
  * `amountMinor` is the total, tax included. Since 0.4.6 `subtotalMinor` is the net and `taxMinor`
  * the tax (null from an older server). Since 0.6.3 `id` is Billing's public id (`inv_…`), the
- * stable handle for the invoice (null from an older server); `number` is what the customer reads.
+ * stable handle for the invoice; `number` is what the customer reads. An empty string means the
+ * server sent no id (an older Billing).
  */
 readonly class Invoice
 {
@@ -25,7 +26,7 @@ readonly class Invoice
         public string $status,
         public ?int $subtotalMinor = null,
         public ?int $taxMinor = null,
-        public ?string $id = null,
+        public string $id = '',
     ) {}
 
     public function isPaid(): bool

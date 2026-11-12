@@ -529,7 +529,7 @@ class HttpManagementTransport implements BundleTransport, CouponCheckoutTranspor
                     $this->stringOr($raw, 'status', 'open'),
                     TaxPayload::int($raw['subtotal_minor'] ?? null),
                     TaxPayload::int($raw['tax_minor'] ?? null),
-                    WireId::from($raw['id'] ?? null),
+                    WireId::from($raw['id'] ?? null) ?? '',
                 );
             }
         }

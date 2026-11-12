@@ -1122,7 +1122,7 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
         return FakeResponse::json($this->page(array_map(
             fn (Invoice $invoice): array => [
                 // The server always sends the public id; a seeded invoice without one gets a stable stand-in.
-                'id' => $invoice->id ?? 'inv_'.substr(hash('sha256', $org.'|'.$invoice->number), 0, 22),
+                'id' => $invoice->id !== '' ? $invoice->id : 'inv_'.substr(hash('sha256', $org.'|'.$invoice->number), 0, 22),
                 'number' => $invoice->number,
                 'date' => $this->date($invoice->date),
                 'amount_minor' => $invoice->amountMinor,

@@ -36,16 +36,10 @@ an invoice's public id. Additive: every existing call sends what it sent before.
 - The fake takes seeded codes with `withCoupon($code, ...$plans)` and answers an unknown code, one
   not valid for the plan, or one on one-off products alone with a 422, as the server does.
   `checkoutSessions()` records every plan checkout with its org, plan, currency and coupon.
-- `Invoice::$id`: Billing's public id (`inv_…`) of each invoice `invoices()` lists, as the last,
-  optional constructor parameter. Null from a server that does not send it. The fake lists the
-  seeded id, or a stable stand-in derived from the organization and number.
-
-### Changed
-
-- `IssuedInvoice::$id` is now the property declared on `Invoice` (`?string`), since a subclass
-  cannot redeclare it. `IssuedInvoice`'s constructor still requires a string, so an issued
-  invoice always has one; code that reads `$issued->id` as `string` under static analysis may
-  need a null check or an assertion.
+- `Invoice::$id` (`string`, default `''`): Billing's public id (`inv_…`) of each invoice
+  `invoices()` lists, as the last, optional constructor parameter. An empty string means the
+  server sent no id (an older Billing). `IssuedInvoice::$id` keeps its `string` type. The fake
+  lists the seeded id, or a stable stand-in derived from the organization and number.
 
 ## [0.6.2] - 2026-11-12
 
