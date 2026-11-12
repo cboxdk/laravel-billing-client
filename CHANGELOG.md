@@ -6,6 +6,26 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-12
+
+Read the billing details without writing them. Additive: every existing call sends what it sent
+before.
+
+### Added
+
+- `organizationProfile(string $org): OrganizationProfile` on `BillingManagement` and the
+  `BillingManager` facade: `GET /v1/organizations/{org}`, the customer's billing details
+  read-only (name, billing email and phone, address with ISO country and subdivision, `taxId`
+  with `taxIdValidated`, purchaser type, EAN, order reference, currency), for an app that shows
+  them next to "Manage in Cbox Billing". It never creates the organization: an unknown one throws
+  a `BillingRefused` with status 404. Needs a Billing server with that route and a token holding
+  `organizations:read` (`organizations:write` does not include it).
+- `Contracts\OrganizationReadTransport`, implemented by `HttpManagementTransport` and
+  `FakeManagementTransport`. A transport written against 0.6.2 keeps compiling; calling
+  `organizationProfile()` on it throws `UnsupportedOperation`.
+- The fake server answers the read with the customer's view of what was provisioned, and 404 for
+  an organization that never was.
+
 ## [0.6.2] - 2026-11-12
 
 No call signature changes; an app on `^0.6` gets it by `composer update`.

@@ -12,6 +12,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -130,6 +131,25 @@ class BillingManagement
         }
 
         return $this->transport->upsertOrganization($org, $attributes);
+    }
+
+    /**
+     * What billing stores for the organization, read-only: the name, billing email and phone, the
+     * address (ISO country and subdivision), the VAT number with its verdict, the purchaser type,
+     * EAN, order reference and currency. For an app that shows the details next to a link to the
+     * hosted portal. It never creates the organization. Since 0.6.3; needs a Billing server with
+     * `GET /v1/organizations/{org}` and a token holding `organizations:read`.
+     *
+     * @throws TransportException a BillingRefused when billing says no (404 for an unknown organization), a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see OrganizationReadTransport}
+     */
+    public function organizationProfile(string $org): OrganizationProfile
+    {
+        if (! $this->transport instanceof OrganizationReadTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OrganizationReadTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->organizationProfile($org);
     }
 
     /**

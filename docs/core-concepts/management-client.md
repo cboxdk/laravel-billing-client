@@ -50,6 +50,19 @@ email, address, `taxId` and `taxIdValidated`, and `shared` when another product 
 (the contact and address then read null). Send `tax_id` to set the VAT number; billing checks it
 against the register, and `taxIdSupported` is false on a server that does not take it.
 
+To only show what is on file, use `organizationProfile($org)` (0.6.3): a read-only
+`GET /v1/organizations/{org}` that answers the same `OrganizationProfile` as the customer's own
+view (name, billing email and phone, the address with its ISO country and subdivision,
+`taxId` with `taxIdValidated`, `purchaserType`, `eanNumber`, `orderReference` and `currency`).
+It never creates the organization: an unknown one throws a `BillingRefused` with status 404. The
+token needs `organizations:read`, which `organizations:write` does not include. Cbox apps keep no
+billing-details form of their own; they show these fields as text next to a link to the portal:
+
+```php
+$profile = BillingManager::organizationProfile($org);
+$manage = BillingManager::createPortalSession($org, url()->current(), section: PortalSection::BillingDetails)->url;
+```
+
 Three optional attributes describe who the customer buys as and what its invoices carry
 (0.4.3, additive):
 
@@ -150,6 +163,7 @@ Like the enforcement path, the network lives behind one contract — `Management
 | Method | Endpoint |
 | --- | --- |
 | `plans()` | `GET /v1/plans` |
+| `organizationProfile($org)` ⁴ | `GET /v1/organizations/{org}` |
 | `subscription($org)` | `GET /v1/subscriptions/{org}` |
 | `subscribe($org, $plan)` | `POST /v1/subscriptions` |
 | `previewChange($org, $plan)` | `POST /v1/subscriptions/{org}/preview` |
@@ -180,6 +194,9 @@ implements `ManagementTransport` throws `UnsupportedOperation`; nothing is sent.
 ³ `section`, `invoice` and `subscription` were added in 0.6.1 on a separate contract,
 `PortalSectionTransport`: only a call that uses them needs it. See
 [open the portal at the right page](../cookbook/hosted-checkout.md#open-the-portal-at-the-right-page).
+
+⁴ Added in 0.6.3 on a separate contract, `OrganizationReadTransport`, with the same compatibility
+rule as ¹.
 
 Every call authenticates with the configured bearer token. The transport is **bound only
 when a base URL and token are configured** — otherwise the host binds its own (e.g. the

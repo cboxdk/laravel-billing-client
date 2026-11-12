@@ -12,6 +12,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -76,7 +77,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -167,7 +168,19 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             throw TransportException::fromResponse($path, $response);
         }
 
-        $body = $response->json();
+        return $this->profileFrom($response->json(), $path);
+    }
+
+    public function organizationProfile(string $org): OrganizationProfile
+    {
+        $path = '/organizations/'.rawurlencode($org);
+
+        return $this->profileFrom($this->get($path), $path);
+    }
+
+    /** The `organization` of an upsert's or a read's answer. */
+    private function profileFrom(mixed $body, string $path): OrganizationProfile
+    {
         $raw = is_array($body) ? ($body['organization'] ?? null) : null;
 
         if (! is_array($raw)) {

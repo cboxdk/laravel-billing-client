@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Facade;
  *
  * @method static list<\Cbox\Billing\Client\ValueObjects\Plan> plans(?string $currency = null)
  * @method static \Cbox\Billing\Client\ValueObjects\OrganizationProfile upsertOrganization(string $org, array<string, mixed> $attributes)
+ * @method static \Cbox\Billing\Client\ValueObjects\OrganizationProfile organizationProfile(string $org)
  * @method static void ensureOrganization(string $org, array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null, purchaser_type?: string|null, ean_number?: string|null, order_reference?: string|null} $attributes)
  * @method static ?Subscription subscription(string $org)
  * @method static SubscriptionResult subscribe(string $org, string $plan)

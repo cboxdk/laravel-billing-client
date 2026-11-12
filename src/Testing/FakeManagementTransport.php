@@ -11,6 +11,7 @@ use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -69,6 +70,7 @@ use Illuminate\Http\Client\Request;
  *  - Status codes as the server sends them: an unknown plan, or a change/cancel/preview with
  *    no subscription, is a 404 ({@see BillingRefused}); an organization with no subscription
  *    reads as null; a provisioning call without a `name` is a 422.
+ *  - Reading an organization (0.6.3) never creates it: one that was never provisioned is a 404.
  *  - Subscribe answers `payment_intent: null`, as the server does today.
  *  - Cancel defaults to period end. An immediate cancel ends the subscription, so it no
  *    longer reads back (the server only serves a serving subscription).
@@ -96,7 +98,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     use InteractsWithResourceLimits;
 
@@ -385,6 +387,11 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         return $this->wire()->upsertOrganization($org, $attributes);
     }
 
+    public function organizationProfile(string $org): OrganizationProfile
+    {
+        return $this->wire()->organizationProfile($org);
+    }
+
     public function subscription(string $org): ?Subscription
     {
         return $this->wire()->subscription($org);
@@ -544,6 +551,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             $method === 'GET' && $segments === ['plans'] => $this->listPlans($query),
             $method === 'GET' && $segments === ['subscriptions'] => $this->listSubscriptionChanges($query),
             $method === 'PUT' && $count === 2 && $resource === 'organizations' => $this->storeOrganization($segments[1], $payload),
+            $method === 'GET' && $count === 2 && $resource === 'organizations' => $this->showOrganization($segments[1]),
             $method === 'GET' && $count === 2 && $resource === 'subscriptions' => $this->showSubscription($segments[1]),
             $method === 'POST' && $segments === ['subscriptions'] => $this->storeSubscription($payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'preview' => $this->preview($segments[1], $payload),
@@ -665,6 +673,16 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         $this->organizations[$org] = $attributes;
 
         return FakeResponse::json(['organization' => $this->presentOrganization($org)], 201);
+    }
+
+    /** `GET /organizations/{org}`: the customer's view, as the upsert with `customer_account`; never creates. */
+    private function showOrganization(string $org): FakeResponse
+    {
+        if (! isset($this->organizations[$org])) {
+            return FakeResponse::error(404, 'Unknown organization.');
+        }
+
+        return FakeResponse::json(['organization' => [...$this->presentOrganization($org), 'billing_phone' => $this->organizations[$org]['billing_phone'] ?? null]]);
     }
 
     private function showSubscription(string $org): FakeResponse
