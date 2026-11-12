@@ -35,6 +35,7 @@ includes a "no" (refused, waitlisted) and "no subscription".
 | Billing said the organization, or a plan, changed after the answer was asked | Billing is asked now, on a page too. See [When Billing says something changed](#when-billing-says-something-changed). |
 | A kept "no" from the admission check, older than 5 seconds | Billing is asked now. See [A refusal is not served stale](#a-refusal-is-not-served-stale). |
 | Billing fails while an answer is kept, on a safe request | The kept answer is served, up to `keep_for` (60 days) old. |
+| A page had to ask now and Billing failed | The kept answer is served, and pages take it for the next 60 seconds without trying Billing again. |
 | Billing fails and nothing is kept, or it is a change | The failure is thrown (`BillingUnavailable`, `BillingRefused`), as before. |
 
 So a returning person's page waits on Billing only when nothing is known about them, or

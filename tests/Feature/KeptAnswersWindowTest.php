@@ -76,7 +76,7 @@ it('reads the store once however many times one request asks', function (): void
 
     $reads = 0;
     Event::listen([CacheHit::class, CacheMissed::class], function (CacheHit|CacheMissed $event) use (&$reads): void {
-        if (str_starts_with($event->key, 'cbox-billing-client:kept:')) {
+        if (preg_match('/^cbox-billing-client:kept:[0-9a-f]{64}$/', $event->key) === 1) {
             $reads++;
         }
     });
@@ -259,3 +259,34 @@ it('refreshes after the response when the app runs no queue', function (): void 
     nextRequest();
     expect(admission()->allows('usr_1', 'org_1'))->toBeFalse();
 });
+
+it('backs off after a page had to fall back to the kept answer, instead of waiting on a failing Billing every page', function (string $who, bool $allowed): void {
+    admission()->allows($who, 'org_1');
+    changes()->organization('org_1');
+    $this->travel(10)->seconds();
+    $this->fake->takeDown();
+
+    // The first page tries Billing, fails and is served the kept answer.
+    nextRequest();
+    expect(admission()->allows($who, 'org_1'))->toBe($allowed)
+        ->and($this->fake->checks())->toBe(2);
+
+    // The following pages do not try again within the backoff.
+    nextRequest();
+    expect(admission()->allows($who, 'org_1'))->toBe($allowed)
+        ->and($this->fake->checks())->toBe(2);
+
+    // A change is never decided on it.
+    nextRequest('POST');
+    expect(fn () => admission()->allows($who, 'org_1'))->toThrow(BillingUnavailable::class);
+
+    // After the backoff the next page asks again, and a working Billing ends it.
+    $this->travel(RefreshKeptAnswer::UNIQUE_FOR + 1)->seconds();
+    $this->fake->bringUp();
+    nextRequest();
+    admission()->allows($who, 'org_1');
+    expect($this->fake->checks())->toBe(4);
+})->with([
+    'a kept yes whose organization changed' => ['usr_1', true],
+    'a kept refusal' => ['usr_2', false],
+]);

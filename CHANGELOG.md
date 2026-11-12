@@ -48,6 +48,10 @@ Billing outage no longer keeps them out.
 - **No queue, no wait.** On the `sync` queue connection a kept-answer refresh and a lease
   top-up used to run inside the request that queued them. While an HTTP request is served
   they now run after the response has been sent. A command on `sync` runs them inline as before.
+- **Backoff in an outage.** When a page had to ask now (the answer is past `max_age`, its
+  organization changed, or it is a refusal), Billing failed and the kept answer was served,
+  pages take the kept answer for the next 60 seconds without trying Billing. It used to wait
+  for the timeout on every such page.
 - `CacheKeptAnswers` takes a `KeptChanges` as an optional last constructor argument.
 
 ## [0.6.1] - 2026-11-12

@@ -36,6 +36,10 @@ use WeakMap;
  *
  * An answer about an organization that Billing has since said changed ({@see KeptChanges}) is
  * asked again instead of served.
+ *
+ * When a page had to ask now, Billing failed and the kept answer was served instead, pages take
+ * the kept answer for the next {@see RefreshKeptAnswer::UNIQUE_FOR} seconds without trying
+ * Billing, so an outage costs one timeout per question a minute and not one per page.
  */
 class CacheKeptAnswers implements KeptAnswers
 {
@@ -82,6 +86,12 @@ class CacheKeptAnswers implements KeptAnswers
             }
         }
 
+        // A page that must ask now, soon after another page found Billing failing on this very
+        // question, takes the kept answer without waiting on Billing again.
+        if ($kept !== null && $servesStale && $held['failure'] === null && $this->cache->has($this->backoff($question))) {
+            return $kept->value;
+        }
+
         try {
             // A request that already found Billing failing on this question does not try again.
             if ($held['failure'] !== null) {
@@ -94,6 +104,8 @@ class CacheKeptAnswers implements KeptAnswers
 
             // Billing is away and a page is only looking: the last answer beats an error page.
             if ($kept !== null && $servesStale) {
+                $this->cache->put($this->backoff($question), 1, RefreshKeptAnswer::UNIQUE_FOR);
+
                 return $kept->value;
             }
 
@@ -123,6 +135,7 @@ class CacheKeptAnswers implements KeptAnswers
         $stored = ['value' => $answer, 'at' => Carbon::now()->getTimestamp()];
         $this->cache->put($this->key($question), $stored, max(1, $this->keepFor));
         $this->jobs->release($this->claim($question));
+        $this->cache->forget($this->backoff($question));
         $this->hold($question, ['stored' => $stored, 'queued' => false, 'failure' => null] + $this->held($question, read: false));
     }
 
@@ -241,6 +254,12 @@ class CacheKeptAnswers implements KeptAnswers
     private function key(KeptQuestion $question): string
     {
         return $this->prefix.hash('sha256', $question->key());
+    }
+
+    /** Set when a page fell back to the kept answer because Billing failed; cleared by the next answer kept. */
+    private function backoff(KeptQuestion $question): string
+    {
+        return $this->prefix.'backoff:'.hash('sha256', $question->key());
     }
 
     private function claim(KeptQuestion $question): string
