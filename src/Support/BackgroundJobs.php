@@ -7,8 +7,10 @@ namespace Cbox\Billing\Client\Support;
 use Cbox\Billing\Client\Jobs\RunsOnBillingQueue;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Cache\Repository as Cache;
+use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Foundation\Application;
 use Throwable;
 
 /**
@@ -19,8 +21,9 @@ use Throwable;
  * after a failure nothing is queued again for the claim's lifetime.
  *
  * Dispatching never throws into the request: a queue that is down is reported and the claim is
- * dropped, so the next request tries again. Run a real queue in production; on the `sync`
- * connection the "background" job runs inside the request that queued it.
+ * dropped, so the next request tries again. Run a real queue in production. An app with no
+ * queue (the `sync` connection) still does not wait: while an HTTP request is served the job
+ * runs after the response has been sent. Only a command on the `sync` connection runs it inline.
  */
 class BackgroundJobs
 {
@@ -44,7 +47,11 @@ class BackgroundJobs
                 $job->routeTo($this->connection, $this->queue);
             }
 
-            $this->app->make(Dispatcher::class)->dispatch($job);
+            if ($this->afterResponse()) {
+                $this->dispatchAfterResponse($claim, $job);
+            } else {
+                $this->app->make(Dispatcher::class)->dispatch($job);
+            }
 
             return true;
         } catch (Throwable $e) {
@@ -53,6 +60,45 @@ class BackgroundJobs
 
             return false;
         }
+    }
+
+    /**
+     * True when the job would otherwise run inside the HTTP request that queued it: the queue
+     * connection is `sync` (the app runs no queue) and a request is being served.
+     */
+    private function afterResponse(): bool
+    {
+        if (! $this->app instanceof Application || ($this->app->runningInConsole() && ! $this->app->runningUnitTests())) {
+            return false;
+        }
+
+        $config = $this->app->make(Config::class);
+        $connection = $this->connection ?? $config->get('queue.default');
+
+        return is_string($connection) && $config->get('queue.connections.'.$connection.'.driver') === 'sync';
+    }
+
+    /** Run `$job` once the response has been sent; a failure is reported and frees the claim. */
+    private function dispatchAfterResponse(string $claim, object $job): void
+    {
+        if (! $this->app instanceof Application) {
+            return;
+        }
+
+        $ran = false;
+        $this->app->terminating(function () use ($claim, $job, &$ran): void {
+            if ($ran) {
+                return;
+            }
+            $ran = true;
+
+            try {
+                $this->app->make(Dispatcher::class)->dispatchSync($job);
+            } catch (Throwable $e) {
+                $this->release($claim);
+                $this->report($e);
+            }
+        });
     }
 
     /** Let the next caller queue the job again (the job finished what it came for). */

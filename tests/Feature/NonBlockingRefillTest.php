@@ -204,12 +204,16 @@ it('refills in the RefillLease job and lets the next low lease queue again', fun
     Http::fake(['*' => Http::response(['lease_id' => 'l1', 'granted' => 100, 'expires_at' => null])]);
     config(['billing-client.base_url' => 'https://billing.test', 'billing-client.api_token' => 't', 'billing-client.cache_store' => 'array']);
 
-    // On the sync queue the job runs at once.
+    // An app without a queue: the top-up runs once the response is out, not in the request.
+    config(['queue.default' => 'sync']);
     $client = app(BillingClient::class);
     $client->commit($client->reserve('org_a', CALLS, 85), 85);
+    expect($client->balance('org_a', CALLS))->toBe(15);
+    $this->app->terminate();
     expect($client->balance('org_a', CALLS))->toBe(115);
 
     $client->commit($client->reserve('org_a', CALLS, 100), 100);
+    $this->app->terminate();
     expect($client->balance('org_a', CALLS))->toBe(115)
         ->and(Http::recorded(fn (HttpRequest $request): bool => str_ends_with($request->url(), '/leases')))->toHaveCount(3);
 });

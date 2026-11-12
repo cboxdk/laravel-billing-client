@@ -47,21 +47,21 @@ it('asks Billing once and answers from the kept answer while it is fresh', funct
         ->and($this->fake->checks())->toBe(2);
 });
 
-it('serves a stale answer at once on a page and queues one refresh', function (): void {
+it('serves a stale yes at once on a page and queues one refresh', function (): void {
     Bus::fake();
     access()->allows('usr_1', 'org_1');
-    access()->allows('usr_2', 'org_1');
     $this->travel(31)->seconds();
 
     $this->fake->refuse('usr_1', 'org_1');
 
     expect(access()->allows('usr_1', 'org_1'))->toBeTrue()
         ->and(access()->allows('usr_1', 'org_1'))->toBeTrue()
-        ->and(access()->allows('usr_2', 'org_1'))->toBeFalse()
-        ->and($this->fake->checks())->toBe(2);
+        ->and($this->fake->checks())->toBe(1);
 
     // One refresh per question, however many pages noticed.
-    Bus::assertDispatchedTimes(RefreshKeptAnswer::class, 2);
+    serveRequest('GET');
+    expect(access()->allows('usr_1', 'org_1'))->toBeTrue();
+    Bus::assertDispatchedTimes(RefreshKeptAnswer::class, 1);
     Bus::assertDispatched(RefreshKeptAnswer::class, fn (RefreshKeptAnswer $job): bool => $job->question == new ServiceAccessQuestion('cbox-test', 'usr_1', 'org_1')
         && $job->tries === 1);
 });
@@ -71,9 +71,17 @@ it('lets the background refresh replace the stale answer', function (): void {
     $this->travel(31)->seconds();
     $this->fake->refuse('usr_1', 'org_1', 'revoked');
 
-    // The sync queue runs the refresh right after the page took the kept answer.
-    expect(access()->allows('usr_1', 'org_1'))->toBeTrue()
-        ->and(access()->decision('usr_1', 'org_1'))->toEqual(new AccessDecision(false, 'revoked'))
+    // The page takes the kept answer; the queued job asks Billing; the next page has its answer.
+    Bus::fake();
+    expect(access()->allows('usr_1', 'org_1'))->toBeTrue();
+    Bus::assertDispatched(RefreshKeptAnswer::class, function (RefreshKeptAnswer $job): bool {
+        app()->call([$job, 'handle']);
+
+        return true;
+    });
+    serveRequest('GET');
+
+    expect(access()->decision('usr_1', 'org_1'))->toEqual(new AccessDecision(false, 'revoked'))
         ->and($this->fake->checks())->toBe(2);
 });
 
@@ -124,7 +132,7 @@ it('asks now outside an HTTP request', function (): void {
 it('makes a page wait once when the answer is older than max_age', function (): void {
     Bus::fake();
     access()->allows('usr_1', 'org_1');
-    $this->travel(86_401)->seconds();
+    $this->travel(31)->days();
     $this->fake->refuse('usr_1', 'org_1');
 
     expect(access()->allows('usr_1', 'org_1'))->toBeFalse()
@@ -148,8 +156,12 @@ it('throws as before when Billing is failing and nothing is kept', function (): 
 
     expect(fn () => access()->allows('usr_1', 'org_1'))->toThrow(BillingUnavailable::class);
 
+    // Within one request Billing is not tried twice for the same question.
     $this->fake->bringUp()->refuseWith(401);
+    expect(fn () => access()->allows('usr_1', 'org_1'))->toThrow(BillingUnavailable::class)
+        ->and($this->fake->checks())->toBe(1);
 
+    serveRequest('GET');
     expect(fn () => access()->allows('usr_1', 'org_1'))->toThrow(BillingRefused::class);
 });
 
@@ -173,20 +185,27 @@ it('keeps the old answer and backs off when the background refresh fails', funct
     access()->allows('usr_1', 'org_1');
     $this->travel(31)->seconds();
     $this->fake->takeDown();
+    config(['queue.default' => 'sync']);
 
-    // The sync queue runs the refresh: it fails, is reported, and the page still gets its answer.
-    expect(access()->allows('usr_1', 'org_1'))->toBeTrue()
-        ->and($reported)->toHaveCount(1)
+    // No queue: the refresh runs after the response. It fails, is reported, and the page had its answer.
+    expect(access()->allows('usr_1', 'org_1'))->toBeTrue();
+    $this->app->terminate();
+    expect($reported)->toHaveCount(1)
         ->and($reported[0])->toBeInstanceOf(BillingUnavailable::class)
         ->and($this->fake->checks())->toBe(2);
 
     // Within the backoff no new refresh is queued.
+    serveRequest('GET');
     access()->allows('usr_1', 'org_1');
+    $this->app->terminate();
     expect($this->fake->checks())->toBe(2);
 
     $this->travel(RefreshKeptAnswer::UNIQUE_FOR + 1)->seconds();
     $this->fake->bringUp()->refuse('usr_1', 'org_1');
+    serveRequest('GET');
     access()->allows('usr_1', 'org_1');
+    $this->app->terminate();
+    serveRequest('GET');
 
     expect($this->fake->checks())->toBe(3)
         ->and(access()->allows('usr_1', 'org_1'))->toBeFalse();
@@ -221,6 +240,7 @@ it('keeps only plain data and treats anything else in the store as nothing kept'
     $answers->refresh($question);
 
     app('cache')->store('array')->put('cbox-billing-client:kept:'.hash('sha256', $question->key()), $stored, 60);
+    serveRequest('GET');
 
     expect($answers->read($question))->toBeNull()
         ->and(access()->allows('usr_1', 'org_1'))->toBeTrue()

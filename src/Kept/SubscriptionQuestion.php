@@ -4,25 +4,30 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client\Kept;
 
-use Cbox\Billing\Client\Contracts\KeptQuestion;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Contracts\OrganizationQuestion;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\SubscriptionPayload;
 use Cbox\Billing\Client\ValueObjects\Subscription;
 use Illuminate\Contracts\Container\Container;
 
 /**
- * "What is this organization's subscription?" as a {@see KeptQuestion}. The answer is
+ * "What is this organization's subscription?" as a kept question. The answer is
  * `['subscription' => <wire shape>|null]`: null is Billing's answer for an organization with no
  * serving subscription, and is kept like any other answer.
  */
-readonly class SubscriptionQuestion implements KeptQuestion
+readonly class SubscriptionQuestion implements OrganizationQuestion
 {
     public function __construct(public string $organization) {}
 
     public function key(): string
     {
         return 'subscription:'.$this->organization;
+    }
+
+    public function organization(): string
+    {
+        return $this->organization;
     }
 
     /** @return array{subscription: array<string, mixed>|null} */

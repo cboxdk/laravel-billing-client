@@ -30,6 +30,8 @@ use Cbox\Billing\Client\Http\HttpServiceAccessTransport;
 use Cbox\Billing\Client\Jobs\RefillLease;
 use Cbox\Billing\Client\Kept\CacheKeptAnswers;
 use Cbox\Billing\Client\Kept\CurrentRequest;
+use Cbox\Billing\Client\Kept\KeptChanges;
+use Cbox\Billing\Client\Kept\KeptFeatures;
 use Cbox\Billing\Client\Kept\KeptSubscriptions;
 use Cbox\Billing\Client\Leasing\LeaseManager;
 use Cbox\Billing\Client\Leasing\OutageGrace;
@@ -103,6 +105,16 @@ class ClientServiceProvider extends ServiceProvider
 
         $this->app->singleton(CurrentRequest::class, static fn (Application $app): CurrentRequest => new CurrentRequest($app));
 
+        $this->app->singleton(KeptChanges::class, static function (Application $app): KeptChanges {
+            $config = $app->make(Config::class);
+
+            return new KeptChanges(
+                self::cache($app, $config),
+                self::intConfig($config, 'billing-client.kept.keep_for', 5_184_000),
+                self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client').':changed:',
+            );
+        });
+
         $this->app->singleton(KeptAnswers::class, static function (Application $app): CacheKeptAnswers {
             $config = $app->make(Config::class);
             $prefix = self::stringConfig($config, 'billing-client.prefix', 'cbox-billing-client');
@@ -113,9 +125,10 @@ class ClientServiceProvider extends ServiceProvider
                 $app->make(CurrentRequest::class),
                 $app->make(BackgroundJobs::class),
                 self::intConfig($config, 'billing-client.kept.fresh_for', 30),
-                self::intConfig($config, 'billing-client.kept.max_age', 86_400),
-                self::intConfig($config, 'billing-client.kept.keep_for', 604_800),
+                self::intConfig($config, 'billing-client.kept.max_age', 2_592_000),
+                self::intConfig($config, 'billing-client.kept.keep_for', 5_184_000),
                 $prefix.':kept:',
+                $app->make(KeptChanges::class),
             );
         });
 
@@ -137,6 +150,10 @@ class ClientServiceProvider extends ServiceProvider
         ));
 
         $this->app->singleton(KeptSubscriptions::class, static fn (Application $app): KeptSubscriptions => new KeptSubscriptions(
+            $app->make(KeptAnswers::class),
+        ));
+
+        $this->app->singleton(KeptFeatures::class, static fn (Application $app): KeptFeatures => new KeptFeatures(
             $app->make(KeptAnswers::class),
         ));
     }

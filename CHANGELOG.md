@@ -4,6 +4,56 @@ All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a mi
 release may change behaviour, and every such change is listed with an upgrade note.
 
 
+## [Unreleased]
+
+The next 0.6 patch. No call signature changes; an app on `^0.6` gets it by `composer update`.
+The kept-answer rules change as listed under Changed.
+
+A returning person's request no longer waits on Billing for the admission check, and a
+Billing outage no longer keeps them out.
+
+### Added
+
+- `Kept\KeptChanges`: tell the client what a Billing webhook said changed, so a kept "yes"
+  does not outlive the subscription. `fromWebhook($type, $data)` marks the organization of a
+  `subscription.*`, `customer.*` or `access.*` event, and everything for `plan.*`;
+  `organization($ref)` and `everything()` do it directly. An answer asked at or before the
+  mark is asked again on its next use, on a page too; if Billing fails then, a page is still
+  served the kept answer.
+- `Kept\KeptFeatures`: an organization's features (`GET /entitlements/{org}/features`) as a
+  kept answer: `features($org, acting:)`, `refresh($org)`, `forget($org)`. Returns the same
+  `FeatureEntitlements` as `Billing::features()`.
+- `Contracts\OrganizationQuestion`: a kept question about one organization, which
+  `KeptChanges` covers. `ServiceAccessQuestion`, `SubscriptionQuestion` and the new
+  `FeaturesQuestion` implement it.
+- `Contracts\JudgesKeptAnswer`: a kept question that decides per answer how long it is fresh
+  and whether a stale one may be served.
+- `Kept\CurrentRequest::instance()`: the request being served, or null.
+
+### Changed
+
+- **Longer window.** `kept.max_age` defaults to 30 days (was 1 day) and `kept.keep_for` to
+  60 days (was 7). A person who comes back after weeks is served the kept answer at once and
+  it is refreshed in the background. Set `BILLING_CLIENT_KEPT_MAX_AGE=86400` and
+  `BILLING_CLIENT_KEPT_KEEP_FOR=604800` to keep the old window.
+- **One read per request.** Within one HTTP request a question is read from the cache store
+  once, a refresh is queued once and Billing is asked at most once, however many times the
+  request asks. A request that found Billing failing on a question gets the same failure (or
+  the kept answer) for that question without a second try.
+- **A refusal is not served stale.** `ServiceAccess` reuses a "no" for 5 seconds
+  (`ServiceAccessQuestion::REFUSAL_FRESH_FOR`) and then asks Billing again in the request, so
+  somebody Billing just let in is in on their next page. It used to be served stale to a page
+  for up to `max_age` while a refresh was queued. An app that worked around this with
+  `allows() || check()->allowed` can drop the second half.
+- **No queue, no wait.** On the `sync` queue connection a kept-answer refresh and a lease
+  top-up used to run inside the request that queued them. While an HTTP request is served
+  they now run after the response has been sent. A command on `sync` runs them inline as before.
+- **Backoff in an outage.** When a page had to ask now (the answer is past `max_age`, its
+  organization changed, or it is a refusal), Billing failed and the kept answer was served,
+  pages take the kept answer for the next 60 seconds without trying Billing. It used to wait
+  for the timeout on every such page.
+- `CacheKeptAnswers` takes a `KeptChanges` as an optional last constructor argument.
+
 ## [0.6.1] - 2026-11-12
 
 Portal deep links. Additive: every existing call sends what it sent before.

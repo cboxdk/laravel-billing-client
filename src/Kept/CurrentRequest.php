@@ -30,4 +30,17 @@ class CurrentRequest
 
         return $this->app->make(Request::class)->isMethodSafe();
     }
+
+    /**
+     * The HTTP request being served, or null when none is. Kept answers remember what they read
+     * for as long as this object lives, so one request reads the store once per question.
+     */
+    public function instance(): ?object
+    {
+        if ($this->safe() === null || ! $this->app->bound('request')) {
+            return null;
+        }
+
+        return $this->app->make(Request::class);
+    }
 }
