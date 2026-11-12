@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Cbox\Billing\Client\Http;
 
+use Cbox\Billing\Client\Enums\InvoicePayment;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Kept\KeptSubscriptions;
+use Cbox\Billing\Client\ValueObjects\ChargedInvoice;
 use Cbox\Billing\Client\ValueObjects\PendingChange;
 use Cbox\Billing\Client\ValueObjects\PriceTax;
 use Cbox\Billing\Client\ValueObjects\Subscription;
@@ -45,6 +47,34 @@ class SubscriptionPayload
             pendingChange: self::pendingChange($raw['pending_change'] ?? null),
             bundle: BundlePayload::subscriptionBundle($raw['bundle'] ?? null, $path),
             recurring: TaxPayload::recurring($raw['recurring'] ?? null),
+            id: WireId::from($raw['id'] ?? null) ?? '',
+        );
+    }
+
+    /**
+     * The invoice a subscribe or an immediate plan change charged (0.6.3), or null when nothing
+     * was billed or the server predates the field. An invoice without its `id` is malformed, not
+     * absent. A `payment` this client does not know reads as pending: the customer may have to act.
+     *
+     * @throws TransportException when the invoice is malformed
+     */
+    public static function chargedInvoice(mixed $raw, string $path): ?ChargedInvoice
+    {
+        if (! is_array($raw)) {
+            return null;
+        }
+
+        $id = WireId::from($raw['id'] ?? null) ?? throw TransportException::malformed($path, 'charged invoice without an id');
+        $amount = $raw['amount_due_minor'] ?? null;
+        $payment = $raw['payment'] ?? null;
+
+        return new ChargedInvoice(
+            id: $id,
+            number: self::nullableString($raw, 'number'),
+            status: is_string($raw['status'] ?? null) ? $raw['status'] : 'open',
+            amountDueMinor: is_int($amount) ? $amount : throw TransportException::malformed($path, 'charged invoice without amount_due_minor'),
+            currency: is_string($raw['currency'] ?? null) ? $raw['currency'] : '',
+            payment: (is_string($payment) ? InvoicePayment::tryFrom($payment) : null) ?? InvoicePayment::Pending,
         );
     }
 
@@ -92,6 +122,7 @@ class SubscriptionPayload
         $recurring = $subscription->recurring;
 
         return [
+            'id' => $subscription->id === '' ? null : $subscription->id,
             'plan' => $subscription->plan,
             'status' => $subscription->status,
             'period_start' => self::format($subscription->periodStart),

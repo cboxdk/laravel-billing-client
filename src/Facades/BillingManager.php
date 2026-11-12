@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Facade;
  *
  * @method static list<\Cbox\Billing\Client\ValueObjects\Plan> plans(?string $currency = null)
  * @method static \Cbox\Billing\Client\ValueObjects\OrganizationProfile upsertOrganization(string $org, array<string, mixed> $attributes)
+ * @method static \Cbox\Billing\Client\ValueObjects\OrganizationProfile organizationProfile(string $org)
  * @method static void ensureOrganization(string $org, array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null, purchaser_type?: string|null, ean_number?: string|null, order_reference?: string|null} $attributes)
  * @method static ?Subscription subscription(string $org)
  * @method static SubscriptionResult subscribe(string $org, string $plan)
@@ -44,7 +45,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Cbox\Billing\Client\ValueObjects\OneOffQuote reconcileOneOffQuote(string $org, string $id)
  * @method static \Cbox\Billing\Client\ValueObjects\OneOffQuote cancelOneOffQuote(string $org, string $id, string $idempotencyKey)
  * @method static \Cbox\Billing\Client\ValueObjects\InvoiceRefundResult refundInvoice(string $org, string $number, string $idempotencyKey, string $reason = 'requested', ?int $amountMinor = null)
- * @method static CheckoutSession createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null)
+ * @method static CheckoutSession createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null, ?string $coupon = null)
  * @method static PortalSession createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null, \Cbox\Billing\Client\Enums\PortalSection|string|null $section = null, ?string $invoice = null, ?string $subscription = null)
  * @method static SetupIntent createSetupIntent(string $org)
  * @method static PaymentIntent createPaymentIntent(string $org, ?string $reference = null, ?int $amountMinor = null, ?string $currency = null)

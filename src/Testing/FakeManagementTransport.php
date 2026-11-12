@@ -5,17 +5,20 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\CouponCheckoutTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
+use Cbox\Billing\Client\Enums\InvoicePayment;
 use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Enums\TaxBasis;
 use Cbox\Billing\Client\Enums\TaxStatus;
@@ -69,6 +72,18 @@ use Illuminate\Http\Client\Request;
  *  - Status codes as the server sends them: an unknown plan, or a change/cancel/preview with
  *    no subscription, is a 404 ({@see BillingRefused}); an organization with no subscription
  *    reads as null; a provisioning call without a `name` is a 422.
+ *  - Reading an organization (0.6.3) never creates it: one that was never provisioned is a 404.
+ *  - A checkout promo code (0.6.3) must be seeded with {@see withCoupon()}: an unknown code, one
+ *    not valid for the plan, or one on one-off products alone is a 422 ({@see BillingRefused}),
+ *    as the server refuses a code it will not apply. Codes match case-insensitively. Every plan
+ *    checkout is recorded with its coupon in {@see checkoutSessions()}.
+ *  - Subscribe and an immediate plan change answer the `invoice` they charged (0.6.3): `paid`, or
+ *    `none_due` when the amount is zero. {@see chargesPending()} leaves every such charge
+ *    `pending`, as when the bank asks for 3-D Secure, so an app can test sending the customer to
+ *    the portal's pending-payment page. The invoice is listed by `invoices()`, and every
+ *    subscription carries an `id` (`sub_…`).
+ *  - Every invoice listed carries an `id` (0.6.3): the seeded {@see Invoice::$id}, or a stable
+ *    stand-in `inv_…` derived from the organization and number, since the server always sends one.
  *  - Subscribe answers `payment_intent: null`, as the server does today.
  *  - Cancel defaults to period end. An immediate cancel ends the subscription, so it no
  *    longer reads back (the server only serves a serving subscription).
@@ -96,7 +111,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, CouponCheckoutTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     use InteractsWithResourceLimits;
 
@@ -162,6 +177,10 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
 
     private int $subscriptionSeq = 0;
 
+    private int $chargedSeq = 0;
+
+    private bool $chargesPending = false;
+
     /** @var array<string, array<string, MeterUsage>> */
     private array $usage = [];
 
@@ -191,6 +210,12 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     private bool $sessionsExpired = false;
 
     private bool $requireProvisioned = false;
+
+    /** @var array<string, list<string>> Seeded promo codes (upper-cased) and the plans each applies to; empty is every plan. */
+    private array $coupons = [];
+
+    /** @var list<array{org: string, plan: string, currency: string|null, coupon: string|null, url: string}> */
+    private array $checkoutSessions = [];
 
     private int $intentSeq = 0;
 
@@ -335,12 +360,47 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         return $this;
     }
 
+    /**
+     * Leave every off-session charge of a subscribe or an immediate plan change pending (0.6.3),
+     * as when the bank asks for 3-D Secure or declines the card: the answered invoice is `open`
+     * with `payment: pending`. A zero amount is still `none_due`.
+     */
+    public function chargesPending(bool $pending = true): self
+    {
+        $this->chargesPending = $pending;
+
+        return $this;
+    }
+
     /** Refuse a subscribe or checkout for an organization never passed to {@see ensureOrganization()}. */
     public function requireProvisionedOrganizations(bool $require = true): self
     {
         $this->requireProvisioned = $require;
 
         return $this;
+    }
+
+    /**
+     * Seed a promo code a checkout may carry (0.6.3), valid for the given plans or, with none
+     * named, for every plan. A code the fake was not given is refused with a 422, as the
+     * server refuses a code it does not know.
+     */
+    public function withCoupon(string $code, string ...$plans): self
+    {
+        $this->coupons[strtoupper(trim($code))] = array_values($plans);
+
+        return $this;
+    }
+
+    /**
+     * Every plan checkout the fake opened, oldest first, with the coupon it carried (upper-cased,
+     * as Billing stores it) — for asserting an app passed the code the customer typed.
+     *
+     * @return list<array{org: string, plan: string, currency: string|null, coupon: string|null, url: string}>
+     */
+    public function checkoutSessions(): array
+    {
+        return $this->checkoutSessions;
     }
 
     /**
@@ -383,6 +443,11 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     public function upsertOrganization(string $org, array $attributes): OrganizationProfile
     {
         return $this->wire()->upsertOrganization($org, $attributes);
+    }
+
+    public function organizationProfile(string $org): OrganizationProfile
+    {
+        return $this->wire()->organizationProfile($org);
     }
 
     public function subscription(string $org): ?Subscription
@@ -482,9 +547,9 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         return $this->wire()->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null, ?string $coupon = null): CheckoutSession
     {
-        return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey);
+        return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey, $coupon);
     }
 
     public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null, ?PortalSection $section = null, ?string $invoice = null, ?string $subscription = null): PortalSession
@@ -544,6 +609,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             $method === 'GET' && $segments === ['plans'] => $this->listPlans($query),
             $method === 'GET' && $segments === ['subscriptions'] => $this->listSubscriptionChanges($query),
             $method === 'PUT' && $count === 2 && $resource === 'organizations' => $this->storeOrganization($segments[1], $payload),
+            $method === 'GET' && $count === 2 && $resource === 'organizations' => $this->showOrganization($segments[1]),
             $method === 'GET' && $count === 2 && $resource === 'subscriptions' => $this->showSubscription($segments[1]),
             $method === 'POST' && $segments === ['subscriptions'] => $this->storeSubscription($payload),
             $method === 'POST' && $count === 3 && $resource === 'subscriptions' && $action === 'preview' => $this->preview($segments[1], $payload),
@@ -667,6 +733,16 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         return FakeResponse::json(['organization' => $this->presentOrganization($org)], 201);
     }
 
+    /** `GET /organizations/{org}`: the customer's view, as the upsert with `customer_account`; never creates. */
+    private function showOrganization(string $org): FakeResponse
+    {
+        if (! isset($this->organizations[$org])) {
+            return FakeResponse::error(404, 'Unknown organization.');
+        }
+
+        return FakeResponse::json(['organization' => [...$this->presentOrganization($org), 'billing_phone' => $this->organizations[$org]['billing_phone'] ?? null]]);
+    }
+
     private function showSubscription(string $org): FakeResponse
     {
         $subscription = $this->subscriptions[$org] ?? null;
@@ -709,11 +785,16 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
 
         $this->subscriptions[$org] = $subscription;
         $this->record($org, $subscription, fresh: true);
+        $plan = $this->plans[$key];
+        $tax = $this->taxFor($plan->priceMinor, $org, null);
+        $due = is_int($tax['total_minor'] ?? null) ? $tax['total_minor'] : $plan->priceMinor;
 
         return FakeResponse::json([
             'subscription' => $this->presentSubscription($org, $subscription),
             'coupon' => null,
-            // The server answers null here today; a subscribe never hands back an intent.
+            // The opening period, invoiced and charged off-session.
+            'invoice' => $this->charge($org, $due, $plan->currency),
+            // Reserved: the server always answers null.
             'payment_intent' => null,
         ], 201);
     }
@@ -779,8 +860,13 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             bundle: $current->bundle,
         );
         $this->record($org, $this->subscriptions[$org]);
+        $due = $preview['due_now_minor'] ?? 0;
 
-        return FakeResponse::json(['scheduled' => false] + $preview);
+        // The prorated amount due now, invoiced and charged off-session; nothing due issues nothing.
+        return FakeResponse::json([
+            'scheduled' => false,
+            'invoice' => is_int($due) && $due > 0 ? $this->charge($org, $due, $target->currency) : null,
+        ] + $preview);
     }
 
     /**
@@ -1067,6 +1153,8 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     {
         return FakeResponse::json($this->page(array_map(
             fn (Invoice $invoice): array => [
+                // The server always sends the public id; a seeded invoice without one gets a stable stand-in.
+                'id' => $invoice->id !== '' ? $invoice->id : 'inv_'.substr(hash('sha256', $org.'|'.$invoice->number), 0, 22),
                 'number' => $invoice->number,
                 'date' => $this->date($invoice->date),
                 'amount_minor' => $invoice->amountMinor,
@@ -1204,7 +1292,13 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             return FakeResponse::error(404, 'Unknown organization.');
         }
 
+        $coupon = trim($this->string($payload, 'coupon'));
+        $plan = $this->string($payload, 'plan');
+
         if (isset($payload['items']) && is_array($payload['items'])) {
+            if ($coupon !== '' && $plan === '') {
+                return FakeResponse::error(422, 'A promo code discounts a plan; one-off products alone take none.');
+            }
             if ($payload['items'] === []) {
                 return FakeResponse::error(422, 'At least one item is required.');
             }
@@ -1228,14 +1322,39 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             return FakeResponse::json(['url' => 'https://billing.example/checkout/'.rawurlencode($org).'/'.(++$this->sessionSeq), 'expires_at' => $expires], 201);
         }
 
-        if (! isset($this->plans[$this->string($payload, 'plan')])) {
+        if (! isset($this->plans[$plan])) {
             return FakeResponse::error(404, 'Unknown plan.');
         }
 
+        $code = null;
+
+        if ($coupon !== '') {
+            $code = strtoupper($coupon);
+            $plans = $this->coupons[$code] ?? null;
+
+            if ($plans === null) {
+                return FakeResponse::error(422, sprintf('Unknown promo code [%s].', $coupon));
+            }
+
+            if ($plans !== [] && ! in_array($plan, $plans, true)) {
+                return FakeResponse::error(422, sprintf('Promo code [%s] does not apply to this plan.', $code));
+            }
+        }
+
         $now = new DateTimeImmutable;
+        $url = 'https://billing.example/checkout/'.rawurlencode($org).'/'.(++$this->sessionSeq);
+        $currency = $this->string($payload, 'currency');
+
+        $this->checkoutSessions[] = [
+            'org' => $org,
+            'plan' => $plan,
+            'currency' => $currency === '' ? null : $currency,
+            'coupon' => $code,
+            'url' => $url,
+        ];
 
         return FakeResponse::json([
-            'url' => 'https://billing.example/checkout/'.rawurlencode($org).'/'.(++$this->sessionSeq),
+            'url' => $url,
             'expires_at' => $this->date($this->sessionsExpired ? $now->modify('-1 minute') : $now->modify('+30 minutes')),
         ], 201);
     }
@@ -1370,6 +1489,7 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     private function presentSubscription(string $org, Subscription $subscription, ?DateTimeImmutable $canceledAt = null): array
     {
         return [
+            'id' => $subscription->id !== '' ? $subscription->id : ($this->records[$org]['id'] ?? FakePublicId::make('sub', 0)),
             'plan' => $subscription->plan,
             'organization_ref' => $subscription->organizationRef ?? $org,
             'status' => $subscription->status,
@@ -1388,6 +1508,36 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             ],
             'add_ons' => [],
             'bundle' => $subscription->bundle?->toArray(),
+        ];
+    }
+
+    /**
+     * Issue and charge an invoice of `$due` for `$org`, as the server's opening period and
+     * immediate plan change do, and answer it in the shape of `SubscriptionController::presentCharged()`.
+     * It is listed by `invoices()` afterwards.
+     *
+     * @return array{id: string, number: string, status: string, amount_due_minor: int, currency: string, payment: string}
+     */
+    private function charge(string $org, int $due, string $currency): array
+    {
+        $payment = match (true) {
+            $due <= 0 => InvoicePayment::NoneDue,
+            $this->chargesPending => InvoicePayment::Pending,
+            default => InvoicePayment::Paid,
+        };
+        $sequence = ++$this->chargedSeq;
+        $id = FakePublicId::make('inv', $sequence);
+        $number = sprintf('SUB-%04d', $sequence);
+        $status = $payment === InvoicePayment::Pending ? 'open' : 'paid';
+        $this->invoices[$org][] = new Invoice($number, new DateTimeImmutable, max(0, $due), $currency, $status, id: $id);
+
+        return [
+            'id' => $id,
+            'number' => $number,
+            'status' => $status,
+            'amount_due_minor' => max(0, $due),
+            'currency' => $currency,
+            'payment' => $payment->value,
         ];
     }
 

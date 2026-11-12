@@ -20,6 +20,10 @@ use DateTimeImmutable;
  * from an older server). The `lines`, `creditMinor` and `newRecurringMinor` are net. A preview
  * (not a change) also carries `dueNowTax` (null when nothing is due) and `newRecurringTax`, the
  * tax on the new recurring price ({@see PriceTax}).
+ *
+ * Since 0.6.3 a change applied now (`changePlan()`) carries `invoice`: the prorated amount due,
+ * invoiced and charged off-session ({@see ChargedInvoice}). Null for a preview, a scheduled
+ * change, nothing due now, and from a server that does not send it.
  */
 readonly class ChangePreview
 {
@@ -39,5 +43,6 @@ readonly class ChangePreview
         public ?int $dueNowTaxMinor = null,
         public ?PriceTax $dueNowTax = null,
         public ?PriceTax $newRecurringTax = null,
+        public ?ChargedInvoice $invoice = null,
     ) {}
 }

@@ -333,7 +333,7 @@ it('refuses createInvoice on a transport without the contract', function (): voi
 
         public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null): CheckoutSession
         {
-            throw new LogicException;
+            return new CheckoutSession('https://billing.test/checkout/'.$org);
         }
 
         public function createPortalSession(string $org, string $returnUrl): PortalSession
@@ -368,5 +368,10 @@ it('refuses createInvoice on a transport without the contract', function (): voi
         // A transport from before 0.6.1 still opens the portal; only a section needs the new contract.
         ->and($management->createPortalSession('org_a', 'https://app.test')->url)->toBe('https://billing.test/portal/org_a')
         ->and(fn () => $management->createPortalSession('org_a', 'https://app.test', section: PortalSection::Invoices))
-        ->toThrow(UnsupportedOperation::class, 'createPortalSession() needs a transport that implements');
+        ->toThrow(UnsupportedOperation::class, 'createPortalSession() needs a transport that implements')
+        // A transport from before 0.6.3 still opens a checkout; only a coupon needs the new contract.
+        ->and($management->createCheckoutSession('org_a', 'pro', 'https://app.test')->url)->toBe('https://billing.test/checkout/org_a')
+        ->and($management->createCheckoutSession('org_a', 'pro', 'https://app.test', coupon: '')->url)->toBe('https://billing.test/checkout/org_a')
+        ->and(fn () => $management->createCheckoutSession('org_a', 'pro', 'https://app.test', coupon: 'LAUNCH100'))
+        ->toThrow(UnsupportedOperation::class, 'createCheckoutSession() needs a transport that implements');
 });

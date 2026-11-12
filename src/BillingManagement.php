@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\CouponCheckoutTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
@@ -12,6 +13,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -130,6 +132,25 @@ class BillingManagement
         }
 
         return $this->transport->upsertOrganization($org, $attributes);
+    }
+
+    /**
+     * What billing stores for the organization, read-only: the name, billing email and phone, the
+     * address (ISO country and subdivision), the VAT number with its verdict, the purchaser type,
+     * EAN, order reference and currency. For an app that shows the details next to a link to the
+     * hosted portal. It never creates the organization. Since 0.6.3; needs a Billing server with
+     * `GET /v1/organizations/{org}` and a token holding `organizations:read`.
+     *
+     * @throws TransportException a BillingRefused when billing says no (404 for an unknown organization), a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when the transport does not implement {@see OrganizationReadTransport}
+     */
+    public function organizationProfile(string $org): OrganizationProfile
+    {
+        if (! $this->transport instanceof OrganizationReadTransport) {
+            throw UnsupportedOperation::missingContract($this->transport, OrganizationReadTransport::class, __FUNCTION__);
+        }
+
+        return $this->transport->organizationProfile($org);
     }
 
     /**
@@ -474,8 +495,28 @@ class BillingManagement
         return $this->transport->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
+    /**
+     * Open a hosted checkout (ADR-0009 path A) for `org` on `plan`, returning the `url` to
+     * redirect the user to.
+     *
+     * `coupon` (since 0.6.3) is a promo code the checkout applies. Billing checks it against the
+     * plan, the currency and the organization before it opens the session, and refuses a code it
+     * will not apply with a 422 ({@see BillingRefused}), so the URL is only minted for a code that
+     * discounts. A blank code counts as none. A call without it is exactly the call before 0.6.3.
+     *
+     * @throws UnsupportedOperation an idempotency key or coupon asked of a transport without the contract for it
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     */
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null, ?string $coupon = null): CheckoutSession
     {
+        if ($coupon !== null && trim($coupon) !== '') {
+            if (! $this->transport instanceof CouponCheckoutTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, CouponCheckoutTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey, trim($coupon));
+        }
+
         if ($idempotencyKey !== null) {
             if (! $this->transport instanceof IdempotentSessionTransport) {
                 throw UnsupportedOperation::missingContract($this->transport, IdempotentSessionTransport::class, __FUNCTION__);

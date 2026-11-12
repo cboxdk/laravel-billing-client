@@ -4,6 +4,7 @@
     "status": 201,
     "body": {
         "subscription": {
+            "id": "sub_k3j9x2m4q8w1z7v5b6n0p2r4",
             "plan": "pro",
             "organization_ref": "org_b",
             "status": "active",
@@ -21,6 +22,14 @@
             "bundle": null
         },
         "coupon": null,
+        "invoice": {
+            "id": "inv_7Hq2kV9xTq3LmN0pR4sW1z",
+            "number": "CB-2026-0042",
+            "status": "paid",
+            "amount_due_minor": 4900,
+            "currency": "EUR",
+            "payment": "paid"
+        },
         "payment_intent": null
     }
 }

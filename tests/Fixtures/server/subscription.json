@@ -3,6 +3,7 @@
     "request": "GET /api/v1/subscriptions/{org}",
     "status": 200,
     "body": {
+        "id": "sub_k3j9x2m4q8w1z7v5b6n0p2r4",
         "plan": "pro",
         "organization_ref": "org_a",
         "status": "active",

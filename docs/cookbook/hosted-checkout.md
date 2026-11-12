@@ -46,6 +46,36 @@ if ($session->isExpired()) {
 }
 ```
 
+## Apply a promo code
+
+Pass the code the customer typed as `coupon` (since 0.6.3). Billing checks it against the plan,
+the currency and the organization before it mints the session, so the URL only exists for a code
+that will discount; the code is redeemed when the checkout completes. A code it will not apply
+(unknown, expired, used up, not valid for the plan or the currency) is a `BillingRefused` with
+status 422, and its `body` carries the reason to show the customer.
+
+```php
+use Cbox\Billing\Client\Exceptions\BillingRefused;
+
+try {
+    $session = BillingManager::createCheckoutSession($org, 'pro', route('billing.done'), coupon: $request->input('coupon'));
+} catch (BillingRefused $e) {
+    if ($e->status === 422) {
+        return back()->withErrors(['coupon' => 'That code does not apply to this plan.']);
+    }
+
+    throw $e;
+}
+```
+
+A blank code counts as none, so an empty form field can be passed straight through. A code that
+takes the whole price off completes on the hosted page without a card. Passing a coupon needs a
+transport that implements `Contracts\CouponCheckoutTransport`, as the HTTP transport and the fake
+do; on one that does not, `BillingManagement` throws `UnsupportedOperation` and sends nothing. A
+checkout without a coupon works on any transport.
+
+## After checkout
+
 The user completes payment on the billing-hosted page and is sent back to `returnUrl`.
 **Settlement is confirmed by a webhook**, not by the return redirect — treat the return as
 "the user came back", and the webhook as "the money moved".
@@ -160,4 +190,16 @@ expect($session->isExpired())->toBeFalse();
 $this->managementTransport()->expireSessions();
 $stale = $this->makeBillingManagement()->createCheckoutSession('org_42', 'pro', 'https://app.test/done');
 expect($stale->isExpired())->toBeTrue();
+```
+
+A coupon has to be seeded with `withCoupon($code, ...$plans)` (no plans named: every plan). The
+fake answers an unknown code, or one not valid for the plan, with a 422, as Billing does, and
+records every plan checkout with its coupon (upper-cased, as Billing stores it):
+
+```php
+$this->managementTransport()->withCoupon('LAUNCH100');
+
+$this->makeBillingManagement()->createCheckoutSession('org_42', 'pro', 'https://app.test/done', coupon: 'launch100');
+
+expect($this->managementTransport()->checkoutSessions()[0]['coupon'])->toBe('LAUNCH100');
 ```

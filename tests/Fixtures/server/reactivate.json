@@ -3,6 +3,7 @@
     "request": "POST /api/v1/subscriptions/{org}/reactivate",
     "status": 200,
     "body": {
+        "id": "sub_k3j9x2m4q8w1z7v5b6n0p2r4",
         "plan": "starter",
         "organization_ref": "org_r",
         "status": "active",

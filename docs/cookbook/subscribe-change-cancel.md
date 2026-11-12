@@ -33,19 +33,44 @@ the customer's billing account (`plans(org: $org)`) so it is their tax. See
 
 ## Subscribe
 
-```php
-$result = BillingManager::subscribe($org, 'pro');
+A subscribe that is not a trial invoices the opening period and charges the saved card
+off-session at once. Since 0.6.3 `$result->invoice` says how that went (a `ChargedInvoice`), and
+`$result->subscription->id` is Billing's `sub_…` id:
 
-if ($result->requiresPayment()) {
-    // Hand $result->paymentIntent->clientSecret to the front-end to confirm the charge.
-    return response()->json([
-        'client_secret' => $result->paymentIntent?->clientSecret,
-    ]);
+```php
+use Cbox\Billing\Client\Enums\InvoicePayment;
+use Cbox\Billing\Client\Enums\PortalSection;
+
+$result = BillingManager::subscribe($org, 'pro');
+$invoice = $result->invoice;
+
+if ($invoice?->payment === InvoicePayment::Pending) {
+    // The charge needs the customer: 3-D Secure, a declined card, or a bank transfer.
+    $portal = BillingManager::createPortalSession(
+        $org,
+        returnUrl: route('billing.done'),
+        section: PortalSection::PendingPayment,
+        invoice: $invoice->id,
+    );
+
+    return redirect()->away($portal->url);
 }
 
-// Free/covered plan — the subscription is already active.
-return response()->json(['status' => $result->subscription->status]);
+// Paid, nothing due, or nothing billed yet (a trial): the subscription is serving.
+return redirect()->route('billing.done');
 ```
+
+| `$result->invoice` | Meaning |
+| --- | --- |
+| `payment === InvoicePayment::Paid` | The off-session charge went through. |
+| `payment === InvoicePayment::NoneDue` | Nothing to collect: a free plan, a 100% promo code, account credit. |
+| `payment === InvoicePayment::Pending` | Still owed. The customer completes 3-D Secure, replaces the card or pays on the portal's pay page for that invoice; Billing returns them to `returnUrl` with `billing_payment=paid\|open`. |
+| `null` | Nothing was billed: a trial (billed when it converts), billing details still missing, or a server older than the field. |
+
+A card that needs 3-D Secure off-session is declined by the gateway, so Billing also opens dunning
+and emails the customer a link to authenticate; sending them to the pay page right away is just
+faster. Use the invoice's `id`, never "the newest open invoice". `paymentIntent` is reserved and
+always null from Billing, so `requiresPayment()` is false.
 
 ## Preview a change before applying it
 
@@ -66,8 +91,12 @@ foreach ($preview->lines as $line) {
 When the user confirms, apply it:
 
 ```php
-$subscription = BillingManager::changePlan($org, 'scale');
+$change = BillingManager::changePlan($org, 'scale');
 ```
+
+An upgrade applied now invoices the prorated amount and charges it off-session: `$change->invoice`
+is a `ChargedInvoice` as on subscribe, so follow `InvoicePayment::Pending` the same way. It is
+null for a scheduled change or when nothing is due now.
 
 ## Cancel
 
@@ -133,5 +162,11 @@ $this->managementTransport()->withPlan(
 $management = $this->makeBillingManagement();
 $result = $management->subscribe('org_42', 'pro');
 
-expect($result->requiresPayment())->toBeTrue();
+expect($result->invoice?->payment)->toBe(InvoicePayment::Paid);
+
+// A charge stuck on 3-D Secure: the invoice is open, and the app sends the customer to pay it.
+$this->managementTransport()->chargesPending();
+$stuck = $management->subscribe('org_43', 'pro');
+
+expect($stuck->invoice?->isPending())->toBeTrue();
 ```

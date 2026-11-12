@@ -6,6 +6,63 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-11-12
+
+Read the billing details without writing them, pass a promo code to a hosted checkout, keep the
+public ids of invoices and subscriptions, and follow a first charge that is stuck on 3-D Secure.
+Additive: every existing call sends what it sent before.
+
+### Added
+
+- `organizationProfile(string $org): OrganizationProfile` on `BillingManagement` and the
+  `BillingManager` facade: `GET /v1/organizations/{org}`, the customer's billing details
+  read-only (name, billing email and phone, address with ISO country and subdivision, `taxId`
+  with `taxIdValidated`, purchaser type, EAN, order reference, currency), for an app that shows
+  them next to "Manage in Cbox Billing". It never creates the organization: an unknown one throws
+  a `BillingRefused` with status 404. Needs a Billing server with that route and a token holding
+  `organizations:read` (`organizations:write` does not include it).
+- `Contracts\OrganizationReadTransport`, implemented by `HttpManagementTransport` and
+  `FakeManagementTransport`. A transport written against 0.6.2 keeps compiling; calling
+  `organizationProfile()` on it throws `UnsupportedOperation`.
+- The fake server answers the read with the customer's view of what was provisioned, and 404 for
+  an organization that never was.
+- `createCheckoutSession(..., ?string $coupon = null)`: a trailing promo code, sent as `coupon`
+  to `POST /v1/checkout-sessions`. Billing validates it against the plan, the currency and the
+  organization before minting the session; a code it will not apply is a `BillingRefused` with
+  status 422. A blank code counts as none. The facade's docblock now lists `idempotencyKey` and
+  `coupon`.
+- `Contracts\CouponCheckoutTransport`, implemented by `HttpManagementTransport` and
+  `FakeManagementTransport`. A transport written against 0.6.2 keeps compiling and still opens a
+  checkout; passing a coupon to it throws `UnsupportedOperation`.
+- The fake takes seeded codes with `withCoupon($code, ...$plans)` and answers an unknown code, one
+  not valid for the plan, or one on one-off products alone with a 422, as the server does.
+  `checkoutSessions()` records every plan checkout with its org, plan, currency and coupon.
+- `Invoice::$id` (`string`, default `''`): Billing's public id (`inv_…`) of each invoice
+  `invoices()` lists, as the last, optional constructor parameter. An empty string means the
+  server sent no id (an older Billing). `IssuedInvoice::$id` keeps its `string` type. The fake
+  lists the seeded id, or a stable stand-in derived from the organization and number.
+- `SubscriptionResult::$invoice` (`?ChargedInvoice`): the opening invoice a subscribe issued and
+  what its off-session charge did: `id` (`inv_…`), `number`, `status`, `amountDueMinor`,
+  `currency` and `payment`, an `Enums\InvoicePayment` (`Paid`, `Pending`, `NoneDue`). `Pending`
+  means the customer has to act (3-D Secure, a declined card, bank transfer): open
+  `createPortalSession(section: PortalSection::PendingPayment, invoice: $invoice->id)`. Null when
+  nothing was billed (a trial) and from a server that does not send it. A `payment` value this
+  client does not know reads as `Pending`.
+- `ChangePreview::$invoice` (`?ChargedInvoice`): the prorated invoice an upgrade applied now by
+  `changePlan()` charged. Null for a preview, a scheduled change, or nothing due now.
+- `Subscription::$id` (`string`, default `''`): Billing's public id (`sub_…`). An empty string
+  means the server sent no id (an older Billing). Kept subscription answers keep it.
+- The fake answers the charged invoice on subscribe and on an upgrade (`paid`, or `none_due` for a
+  zero amount), lists it in `invoices()`, and gives every subscription an `id`.
+  `chargesPending()` leaves those charges `pending`, to test the 3-D Secure flow.
+- `invoice` needs a Billing server with cboxdk/cbox-billing#384; until then it reads null.
+
+### Changed
+
+- The subscribe cookbook no longer branches on `requiresPayment()`: Billing answers
+  `payment_intent: null` on every subscribe (the field is reserved), so it was always false. Follow
+  `$result->invoice` instead.
+
 ## [0.6.2] - 2026-11-12
 
 No call signature changes; an app on `^0.6` gets it by `composer update`.

@@ -26,7 +26,7 @@ BillingManager::ensureOrganization('org_42', [
 
 $plans = BillingManager::plans('USD');                  // list<Plan>, priced in USD
 $current = BillingManager::subscription('org_42');      // ?Subscription
-$result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult (payment intent: null today)
+$result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult: ->invoice says what the charge did
 $preview = BillingManager::previewChange('org_42', 'scale');
 $updated = BillingManager::changePlan('org_42', 'scale');
 $canceled = BillingManager::cancel('org_42', atPeriodEnd: true);
@@ -49,6 +49,19 @@ $attributes)`, the same call with billing's answer: an `OrganizationProfile` wit
 email, address, `taxId` and `taxIdValidated`, and `shared` when another product owns the account
 (the contact and address then read null). Send `tax_id` to set the VAT number; billing checks it
 against the register, and `taxIdSupported` is false on a server that does not take it.
+
+To only show what is on file, use `organizationProfile($org)` (0.6.3): a read-only
+`GET /v1/organizations/{org}` that answers the same `OrganizationProfile` as the customer's own
+view (name, billing email and phone, the address with its ISO country and subdivision,
+`taxId` with `taxIdValidated`, `purchaserType`, `eanNumber`, `orderReference` and `currency`).
+It never creates the organization: an unknown one throws a `BillingRefused` with status 404. The
+token needs `organizations:read`, which `organizations:write` does not include. Cbox apps keep no
+billing-details form of their own; they show these fields as text next to a link to the portal:
+
+```php
+$profile = BillingManager::organizationProfile($org);
+$manage = BillingManager::createPortalSession($org, url()->current(), section: PortalSection::BillingDetails)->url;
+```
 
 Three optional attributes describe who the customer buys as and what its invoices carry
 (0.4.3, additive):
@@ -130,7 +143,12 @@ The subscription read carries the same for what the subscription costs per perio
 coupon, `tax`, and `totalMinor()`), a change preview splits what is due now
 (`dueNowMinor` includes tax, `dueNowNetMinor`, `dueNowTaxMinor`, `dueNowTax`) and taxes the new
 price (`newRecurringTax`), and an invoice has `subtotalMinor` and `taxMinor` beside its total
-`amountMinor`.
+`amountMinor`. Since 0.6.3 a listed `Invoice` also carries `id`, Billing's public id (`inv_…`):
+the stable handle to link or store, where `number` is what the customer reads. A subscribe's
+`$result->invoice` (and an upgrade's `$change->invoice`) is the invoice it charged, with `payment`
+`Paid`, `NoneDue` or `Pending`; on `Pending` open the portal's `PendingPayment` section for that
+invoice id. See [subscribe](../cookbook/subscribe-change-cancel.md#subscribe). It is an empty
+string from a server that does not send it (an older Billing).
 
 Naming a buyer needs a transport that implements `Contracts\TaxedPlanTransport`, as the HTTP
 transport and the fake do; `plans()` throws `UnsupportedOperation` otherwise. The tax depends on the
@@ -150,6 +168,7 @@ Like the enforcement path, the network lives behind one contract — `Management
 | Method | Endpoint |
 | --- | --- |
 | `plans()` | `GET /v1/plans` |
+| `organizationProfile($org)` ⁴ | `GET /v1/organizations/{org}` |
 | `subscription($org)` | `GET /v1/subscriptions/{org}` |
 | `subscribe($org, $plan)` | `POST /v1/subscriptions` |
 | `previewChange($org, $plan)` | `POST /v1/subscriptions/{org}/preview` |
@@ -161,7 +180,7 @@ Like the enforcement path, the network lives behind one contract — `Management
 | `invoices($org)` | `GET /v1/invoices/{org}` |
 | `createInvoice($org, $invoice, $idempotencyKey)` ² | `POST /v1/invoices/{org}` |
 | `invoice($org, $number)` ² | `GET /v1/invoices/{org}/{number}` |
-| `createCheckoutSession($org, $plan, $returnUrl, ?$currency)` | `POST /v1/checkout-sessions` |
+| `createCheckoutSession($org, $plan, $returnUrl, ?$currency, ?$idempotencyKey, ?$coupon)` ⁵ | `POST /v1/checkout-sessions` |
 | `createPortalSession($org, $returnUrl, ?$idempotencyKey, ?$section, ?$invoice, ?$subscription)` ³ | `POST /v1/portal-sessions` |
 | `createSetupIntent($org)` | `POST /v1/setup-intents` |
 | `createPaymentIntent($org, ?$reference, ?$amountMinor, ?$currency)` | `POST /v1/payment-intents` |
@@ -180,6 +199,12 @@ implements `ManagementTransport` throws `UnsupportedOperation`; nothing is sent.
 ³ `section`, `invoice` and `subscription` were added in 0.6.1 on a separate contract,
 `PortalSectionTransport`: only a call that uses them needs it. See
 [open the portal at the right page](../cookbook/hosted-checkout.md#open-the-portal-at-the-right-page).
+
+⁴ Added in 0.6.3 on a separate contract, `OrganizationReadTransport`, with the same compatibility
+rule as ¹.
+
+⁵ `coupon` was added in 0.6.3 on a separate contract, `CouponCheckoutTransport`: only a call that
+passes a code needs it. See [apply a promo code](../cookbook/hosted-checkout.md#apply-a-promo-code).
 
 Every call authenticates with the configured bearer token. The transport is **bound only
 when a base URL and token are configured** — otherwise the host binds its own (e.g. the

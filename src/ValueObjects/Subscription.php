@@ -25,6 +25,9 @@ use DateTimeImmutable;
  * Since 0.4.6 a subscription read (`subscription()`) carries `recurring`: what it costs per
  * period with the tax ({@see RecurringPrice}). Null from an older server, and on the responses
  * that do not price it (subscribe, change, cancel, the change feed).
+ *
+ * Since 0.6.3 it carries `id`, Billing's public id (`sub_…`). An empty string means the server
+ * sent no id (an older Billing).
  */
 readonly class Subscription
 {
@@ -42,6 +45,7 @@ readonly class Subscription
         public ?PendingChange $pendingChange = null,
         public ?SubscriptionBundle $bundle = null,
         public ?RecurringPrice $recurring = null,
+        public string $id = '',
     ) {}
 
     /** True while the subscription is in a free trial. */

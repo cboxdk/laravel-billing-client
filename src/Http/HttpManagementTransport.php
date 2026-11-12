@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Http;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\CouponCheckoutTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
@@ -12,6 +13,7 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
@@ -76,7 +78,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, CouponCheckoutTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -167,7 +169,19 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             throw TransportException::fromResponse($path, $response);
         }
 
-        $body = $response->json();
+        return $this->profileFrom($response->json(), $path);
+    }
+
+    public function organizationProfile(string $org): OrganizationProfile
+    {
+        $path = '/organizations/'.rawurlencode($org);
+
+        return $this->profileFrom($this->get($path), $path);
+    }
+
+    /** The `organization` of an upsert's or a read's answer. */
+    private function profileFrom(mixed $body, string $path): OrganizationProfile
+    {
         $raw = is_array($body) ? ($body['organization'] ?? null) : null;
 
         if (! is_array($raw)) {
@@ -216,6 +230,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         return new SubscriptionResult(
             $this->toSubscription($rawSubscription, '/subscriptions'),
             is_array($rawIntent) ? $this->toPaymentIntent($rawIntent) : null,
+            SubscriptionPayload::chargedInvoice($body['invoice'] ?? null, '/subscriptions'),
         );
     }
 
@@ -266,6 +281,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
             TaxPayload::int($body['due_now_tax_minor'] ?? null),
             TaxPayload::priceTax($body['due_now_tax'] ?? null),
             TaxPayload::priceTax($body['new_recurring_tax'] ?? null),
+            SubscriptionPayload::chargedInvoice($body['invoice'] ?? null, $path),
         );
     }
 
@@ -515,6 +531,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
                     $this->stringOr($raw, 'status', 'open'),
                     TaxPayload::int($raw['subtotal_minor'] ?? null),
                     TaxPayload::int($raw['tax_minor'] ?? null),
+                    WireId::from($raw['id'] ?? null) ?? '',
                 );
             }
         }
@@ -714,7 +731,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         );
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null, ?string $coupon = null): CheckoutSession
     {
         $path = '/checkout-sessions';
 
@@ -723,6 +740,11 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
 
         if ($currency !== null) {
             $payload['currency'] = $currency;
+        }
+
+        // Only sent when given, so a checkout without a code is the request it was before 0.6.3.
+        if ($coupon !== null) {
+            $payload['coupon'] = $coupon;
         }
 
         $body = $this->postWithHeaders($path, $payload, $this->sessionHeaders($idempotencyKey));

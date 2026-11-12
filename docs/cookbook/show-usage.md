@@ -65,10 +65,14 @@ Prefer the pure form in a hot loop and cache the `Entitlements`.
 $invoices = BillingManager::invoices($org); // list<Invoice>
 
 foreach ($invoices as $invoice) {
-    // $invoice->number, $invoice->date (?DateTimeImmutable),
+    // $invoice->id (`inv_…`, since 0.6.3), $invoice->number, $invoice->date (?DateTimeImmutable),
     // $invoice->amountMinor, $invoice->currency, $invoice->status
     $paid = $invoice->isPaid();
 }
 ```
 
 Amounts are integer **minor units** — format for display at the edge, never as floats.
+
+Keep `id` when you store or link an invoice: it is Billing's public id and never changes, while
+`number` is the customer-facing number. It is an empty string only from a server older than the
+one that sends it.
