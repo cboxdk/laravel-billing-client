@@ -71,6 +71,8 @@ use Illuminate\Http\Client\Request;
  *    no subscription, is a 404 ({@see BillingRefused}); an organization with no subscription
  *    reads as null; a provisioning call without a `name` is a 422.
  *  - Reading an organization (0.6.3) never creates it: one that was never provisioned is a 404.
+ *  - Every invoice listed carries an `id` (0.6.3): the seeded {@see Invoice::$id}, or a stable
+ *    stand-in `inv_…` derived from the organization and number, since the server always sends one.
  *  - Subscribe answers `payment_intent: null`, as the server does today.
  *  - Cancel defaults to period end. An immediate cancel ends the subscription, so it no
  *    longer reads back (the server only serves a serving subscription).
@@ -1085,6 +1087,8 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     {
         return FakeResponse::json($this->page(array_map(
             fn (Invoice $invoice): array => [
+                // The server always sends the public id; a seeded invoice without one gets a stable stand-in.
+                'id' => $invoice->id ?? 'inv_'.substr(hash('sha256', $org.'|'.$invoice->number), 0, 22),
                 'number' => $invoice->number,
                 'date' => $this->date($invoice->date),
                 'amount_minor' => $invoice->amountMinor,

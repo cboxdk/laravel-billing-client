@@ -11,6 +11,9 @@ use DateTimeImmutable;
  * plus billing's public `id` (`inv_…`), the `lines`, the `appendix` (the array you sent, null when none), your
  * `metadata`, a signed, time-limited `pdfUrl` and the `environment` it was issued in
  * (`live` or `sandbox`).
+ *
+ * Since 0.6.3 `id` is declared on {@see Invoice} (nullable there, for an older server's list);
+ * an issued invoice always has one, since the constructor requires it.
  */
 readonly class IssuedInvoice extends Invoice
 {
@@ -27,13 +30,13 @@ readonly class IssuedInvoice extends Invoice
         string $status,
         ?int $subtotalMinor,
         ?int $taxMinor,
-        public string $id,
+        string $id,
         public array $lines,
         public ?array $appendix,
         public array $metadata,
         public ?string $pdfUrl,
         public string $environment,
     ) {
-        parent::__construct($number, $date, $amountMinor, $currency, $status, $subtotalMinor, $taxMinor);
+        parent::__construct($number, $date, $amountMinor, $currency, $status, $subtotalMinor, $taxMinor, $id);
     }
 }

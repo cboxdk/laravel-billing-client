@@ -528,6 +528,7 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
                     $this->stringOr($raw, 'status', 'open'),
                     TaxPayload::int($raw['subtotal_minor'] ?? null),
                     TaxPayload::int($raw['tax_minor'] ?? null),
+                    WireId::from($raw['id'] ?? null),
                 );
             }
         }

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Cbox\Billing\Client\Exceptions\BillingRefused;
+use Cbox\Billing\Client\ValueObjects\Invoice;
 use Cbox\Billing\Client\ValueObjects\InvoiceAppendix;
 use Cbox\Billing\Client\ValueObjects\IssuedInvoice;
 use Cbox\Billing\Client\ValueObjects\NewInvoice;
@@ -98,4 +99,31 @@ it('turns a 422 billing_address_required into BillingRefused carrying missing fi
         expect($e->status)->toBe(422)
             ->and(json_decode((string) $e->body, true)['missing'])->toBe(['address_line1', 'postal_code']);
     }
+});
+
+it('carries the public id of each listed invoice', function (): void {
+    Http::fake(['billing.test/api/v1/invoices/org_a*' => Http::response(['data' => [
+        ['id' => 'inv_7Hq2kV9xTq3LmN0pR4sW1z', 'number' => 'CB-2', 'date' => '2026-11-01T00:00:00+00:00', 'amount_minor' => 0, 'currency' => 'EUR', 'status' => 'paid'],
+        // An older server sent no id.
+        ['number' => 'CB-1', 'date' => '2026-10-01T00:00:00+00:00', 'amount_minor' => 4900, 'currency' => 'EUR', 'status' => 'paid'],
+    ], 'has_more' => false, 'next_cursor' => null])]);
+
+    $invoices = makeHttpManagement()->invoices('org_a');
+
+    expect($invoices[0]->id)->toBe('inv_7Hq2kV9xTq3LmN0pR4sW1z')
+        ->and($invoices[0]->number)->toBe('CB-2')
+        ->and($invoices[1]->id)->toBeNull();
+});
+
+it('lists an id for every invoice in the fake: the seeded one, or a stable stand-in', function (): void {
+    $this->managementTransport()
+        ->withInvoice('org_a', new Invoice('CB-1', null, 4_900, 'EUR', 'paid', id: 'inv_seeded'))
+        ->withInvoice('org_a', new Invoice('CB-2', null, 4_900, 'EUR', 'open'));
+
+    $first = $this->makeBillingManagement()->invoices('org_a');
+    $again = $this->makeBillingManagement()->invoices('org_a');
+
+    expect($first[0]->id)->toBe('inv_seeded')
+        ->and($first[1]->id)->toStartWith('inv_')
+        ->and($first[1]->id)->toBe($again[1]->id);
 });

@@ -141,7 +141,8 @@ it('parses every recorded management response', function (): void {
 
     expect(managementReplaying('usage-summary')->usage('org_a')->for('seats')?->allowance)->toBeNull();
 
-    expect(managementReplaying('invoices')->invoices('org_a')[0]->number)->toBe('CB-2026-0042');
+    expect(managementReplaying('invoices')->invoices('org_a')[0]->number)->toBe('CB-2026-0042')
+        ->and(managementReplaying('invoices')->invoices('org_a')[0]->id)->toBe('inv_7Hq2kV9xTq3LmN0pR4sW1z');
 
     expect(managementReplaying('checkout-session')->createCheckoutSession('org_a', 'pro', 'https://app.test')->expiresAt)->not->toBeNull();
 
