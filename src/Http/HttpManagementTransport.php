@@ -230,6 +230,7 @@ class HttpManagementTransport implements BundleTransport, CouponCheckoutTranspor
         return new SubscriptionResult(
             $this->toSubscription($rawSubscription, '/subscriptions'),
             is_array($rawIntent) ? $this->toPaymentIntent($rawIntent) : null,
+            SubscriptionPayload::chargedInvoice($body['invoice'] ?? null, '/subscriptions'),
         );
     }
 
@@ -280,6 +281,7 @@ class HttpManagementTransport implements BundleTransport, CouponCheckoutTranspor
             TaxPayload::int($body['due_now_tax_minor'] ?? null),
             TaxPayload::priceTax($body['due_now_tax'] ?? null),
             TaxPayload::priceTax($body['new_recurring_tax'] ?? null),
+            SubscriptionPayload::chargedInvoice($body['invoice'] ?? null, $path),
         );
     }
 

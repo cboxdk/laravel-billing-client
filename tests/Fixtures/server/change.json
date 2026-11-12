@@ -4,6 +4,14 @@
     "status": 200,
     "body": {
         "scheduled": false,
+        "invoice": {
+            "id": "inv_7Hq2kV9xTq3LmN0pR4sW1z",
+            "number": "CB-2026-0042",
+            "status": "paid",
+            "amount_due_minor": 2400,
+            "currency": "EUR",
+            "payment": "paid"
+        },
         "due_now_minor": 2400,
         "due_now_net_minor": 2400,
         "due_now_tax_minor": 0,

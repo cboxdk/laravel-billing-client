@@ -18,6 +18,7 @@ use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
+use Cbox\Billing\Client\Enums\InvoicePayment;
 use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Enums\TaxBasis;
 use Cbox\Billing\Client\Enums\TaxStatus;
@@ -76,6 +77,11 @@ use Illuminate\Http\Client\Request;
  *    not valid for the plan, or one on one-off products alone is a 422 ({@see BillingRefused}),
  *    as the server refuses a code it will not apply. Codes match case-insensitively. Every plan
  *    checkout is recorded with its coupon in {@see checkoutSessions()}.
+ *  - Subscribe and an immediate plan change answer the `invoice` they charged (0.6.3): `paid`, or
+ *    `none_due` when the amount is zero. {@see chargesPending()} leaves every such charge
+ *    `pending`, as when the bank asks for 3-D Secure, so an app can test sending the customer to
+ *    the portal's pending-payment page. The invoice is listed by `invoices()`, and every
+ *    subscription carries an `id` (`sub_…`).
  *  - Every invoice listed carries an `id` (0.6.3): the seeded {@see Invoice::$id}, or a stable
  *    stand-in `inv_…` derived from the organization and number, since the server always sends one.
  *  - Subscribe answers `payment_intent: null`, as the server does today.
@@ -170,6 +176,10 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
     private array $records = [];
 
     private int $subscriptionSeq = 0;
+
+    private int $chargedSeq = 0;
+
+    private bool $chargesPending = false;
 
     /** @var array<string, array<string, MeterUsage>> */
     private array $usage = [];
@@ -346,6 +356,18 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
     public function refuseWith(int $status): self
     {
         $this->refusal = $status;
+
+        return $this;
+    }
+
+    /**
+     * Leave every off-session charge of a subscribe or an immediate plan change pending (0.6.3),
+     * as when the bank asks for 3-D Secure or declines the card: the answered invoice is `open`
+     * with `payment: pending`. A zero amount is still `none_due`.
+     */
+    public function chargesPending(bool $pending = true): self
+    {
+        $this->chargesPending = $pending;
 
         return $this;
     }
@@ -763,11 +785,16 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
 
         $this->subscriptions[$org] = $subscription;
         $this->record($org, $subscription, fresh: true);
+        $plan = $this->plans[$key];
+        $tax = $this->taxFor($plan->priceMinor, $org, null);
+        $due = is_int($tax['total_minor'] ?? null) ? $tax['total_minor'] : $plan->priceMinor;
 
         return FakeResponse::json([
             'subscription' => $this->presentSubscription($org, $subscription),
             'coupon' => null,
-            // The server answers null here today; a subscribe never hands back an intent.
+            // The opening period, invoiced and charged off-session.
+            'invoice' => $this->charge($org, $due, $plan->currency),
+            // Reserved: the server always answers null.
             'payment_intent' => null,
         ], 201);
     }
@@ -833,8 +860,13 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
             bundle: $current->bundle,
         );
         $this->record($org, $this->subscriptions[$org]);
+        $due = $preview['due_now_minor'] ?? 0;
 
-        return FakeResponse::json(['scheduled' => false] + $preview);
+        // The prorated amount due now, invoiced and charged off-session; nothing due issues nothing.
+        return FakeResponse::json([
+            'scheduled' => false,
+            'invoice' => is_int($due) && $due > 0 ? $this->charge($org, $due, $target->currency) : null,
+        ] + $preview);
     }
 
     /**
@@ -1457,6 +1489,7 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
     private function presentSubscription(string $org, Subscription $subscription, ?DateTimeImmutable $canceledAt = null): array
     {
         return [
+            'id' => $subscription->id !== '' ? $subscription->id : ($this->records[$org]['id'] ?? FakePublicId::make('sub', 0)),
             'plan' => $subscription->plan,
             'organization_ref' => $subscription->organizationRef ?? $org,
             'status' => $subscription->status,
@@ -1475,6 +1508,36 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
             ],
             'add_ons' => [],
             'bundle' => $subscription->bundle?->toArray(),
+        ];
+    }
+
+    /**
+     * Issue and charge an invoice of `$due` for `$org`, as the server's opening period and
+     * immediate plan change do, and answer it in the shape of `SubscriptionController::presentCharged()`.
+     * It is listed by `invoices()` afterwards.
+     *
+     * @return array{id: string, number: string, status: string, amount_due_minor: int, currency: string, payment: string}
+     */
+    private function charge(string $org, int $due, string $currency): array
+    {
+        $payment = match (true) {
+            $due <= 0 => InvoicePayment::NoneDue,
+            $this->chargesPending => InvoicePayment::Pending,
+            default => InvoicePayment::Paid,
+        };
+        $sequence = ++$this->chargedSeq;
+        $id = FakePublicId::make('inv', $sequence);
+        $number = sprintf('SUB-%04d', $sequence);
+        $status = $payment === InvoicePayment::Pending ? 'open' : 'paid';
+        $this->invoices[$org][] = new Invoice($number, new DateTimeImmutable, max(0, $due), $currency, $status, id: $id);
+
+        return [
+            'id' => $id,
+            'number' => $number,
+            'status' => $status,
+            'amount_due_minor' => max(0, $due),
+            'currency' => $currency,
+            'payment' => $payment->value,
         ];
     }
 
