@@ -8,8 +8,8 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [0.6.3] - 2026-11-12
 
-Read the billing details without writing them. Additive: every existing call sends what it sent
-before.
+Read the billing details without writing them, pass a promo code to a hosted checkout, and keep
+an invoice's public id. Additive: every existing call sends what it sent before.
 
 ### Added
 
@@ -25,6 +25,27 @@ before.
   `organizationProfile()` on it throws `UnsupportedOperation`.
 - The fake server answers the read with the customer's view of what was provisioned, and 404 for
   an organization that never was.
+- `createCheckoutSession(..., ?string $coupon = null)`: a trailing promo code, sent as `coupon`
+  to `POST /v1/checkout-sessions`. Billing validates it against the plan, the currency and the
+  organization before minting the session; a code it will not apply is a `BillingRefused` with
+  status 422. A blank code counts as none. The facade's docblock now lists `idempotencyKey` and
+  `coupon`.
+- `Contracts\CouponCheckoutTransport`, implemented by `HttpManagementTransport` and
+  `FakeManagementTransport`. A transport written against 0.6.2 keeps compiling and still opens a
+  checkout; passing a coupon to it throws `UnsupportedOperation`.
+- The fake takes seeded codes with `withCoupon($code, ...$plans)` and answers an unknown code, one
+  not valid for the plan, or one on one-off products alone with a 422, as the server does.
+  `checkoutSessions()` records every plan checkout with its org, plan, currency and coupon.
+- `Invoice::$id`: Billing's public id (`inv_…`) of each invoice `invoices()` lists, as the last,
+  optional constructor parameter. Null from a server that does not send it. The fake lists the
+  seeded id, or a stable stand-in derived from the organization and number.
+
+### Changed
+
+- `IssuedInvoice::$id` is now the property declared on `Invoice` (`?string`), since a subclass
+  cannot redeclare it. `IssuedInvoice`'s constructor still requires a string, so an issued
+  invoice always has one; code that reads `$issued->id` as `string` under static analysis may
+  need a null check or an assertion.
 
 ## [0.6.2] - 2026-11-12
 

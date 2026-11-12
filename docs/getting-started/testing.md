@@ -67,6 +67,13 @@ and replaying it with a different body is a 409 `idempotency_conflict`, as on th
 invoice `invoice($org, $number)` should read back with `withIssuedInvoice($org, new IssuedInvoice(...))`;
 an unknown number is a 404.
 
+Every invoice `invoices($org)` lists has an `id` (0.6.3), as on the server: the one you seeded on
+the `Invoice`, or a stable `inv_…` stand-in derived from the organization and number.
+
+Checkout promo codes (0.6.3) are seeded with `withCoupon($code, ...$plans)`; an unknown code, one
+not valid for the plan, or one on one-off products alone is a 422. `checkoutSessions()` lists every
+plan checkout the fake opened with its org, plan, currency and coupon.
+
 Billing's tax answers are seeded with `withTax()`: a `PriceTax` for nobody in particular, an
 organization (`org:`) or a country (`country:`). The fake resolves the buyer as billing does (the
 organization's answer, else the country's, else nobody's) and works out each amount from the

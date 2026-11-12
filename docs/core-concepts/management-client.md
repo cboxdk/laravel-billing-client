@@ -143,7 +143,9 @@ The subscription read carries the same for what the subscription costs per perio
 coupon, `tax`, and `totalMinor()`), a change preview splits what is due now
 (`dueNowMinor` includes tax, `dueNowNetMinor`, `dueNowTaxMinor`, `dueNowTax`) and taxes the new
 price (`newRecurringTax`), and an invoice has `subtotalMinor` and `taxMinor` beside its total
-`amountMinor`.
+`amountMinor`. Since 0.6.3 a listed `Invoice` also carries `id`, Billing's public id (`inv_…`):
+the stable handle to link or store, where `number` is what the customer reads. It is null from a
+server that does not send it.
 
 Naming a buyer needs a transport that implements `Contracts\TaxedPlanTransport`, as the HTTP
 transport and the fake do; `plans()` throws `UnsupportedOperation` otherwise. The tax depends on the
@@ -175,7 +177,7 @@ Like the enforcement path, the network lives behind one contract — `Management
 | `invoices($org)` | `GET /v1/invoices/{org}` |
 | `createInvoice($org, $invoice, $idempotencyKey)` ² | `POST /v1/invoices/{org}` |
 | `invoice($org, $number)` ² | `GET /v1/invoices/{org}/{number}` |
-| `createCheckoutSession($org, $plan, $returnUrl, ?$currency)` | `POST /v1/checkout-sessions` |
+| `createCheckoutSession($org, $plan, $returnUrl, ?$currency, ?$idempotencyKey, ?$coupon)` ⁵ | `POST /v1/checkout-sessions` |
 | `createPortalSession($org, $returnUrl, ?$idempotencyKey, ?$section, ?$invoice, ?$subscription)` ³ | `POST /v1/portal-sessions` |
 | `createSetupIntent($org)` | `POST /v1/setup-intents` |
 | `createPaymentIntent($org, ?$reference, ?$amountMinor, ?$currency)` | `POST /v1/payment-intents` |
@@ -197,6 +199,9 @@ implements `ManagementTransport` throws `UnsupportedOperation`; nothing is sent.
 
 ⁴ Added in 0.6.3 on a separate contract, `OrganizationReadTransport`, with the same compatibility
 rule as ¹.
+
+⁵ `coupon` was added in 0.6.3 on a separate contract, `CouponCheckoutTransport`: only a call that
+passes a code needs it. See [apply a promo code](../cookbook/hosted-checkout.md#apply-a-promo-code).
 
 Every call authenticates with the configured bearer token. The transport is **bound only
 when a base URL and token are configured** — otherwise the host binds its own (e.g. the
