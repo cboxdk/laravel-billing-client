@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\CouponCheckoutTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
@@ -494,8 +495,28 @@ class BillingManagement
         return $this->transport->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
+    /**
+     * Open a hosted checkout (ADR-0009 path A) for `org` on `plan`, returning the `url` to
+     * redirect the user to.
+     *
+     * `coupon` (since 0.6.3) is a promo code the checkout applies. Billing checks it against the
+     * plan, the currency and the organization before it opens the session, and refuses a code it
+     * will not apply with a 422 ({@see BillingRefused}), so the URL is only minted for a code that
+     * discounts. A blank code counts as none. A call without it is exactly the call before 0.6.3.
+     *
+     * @throws UnsupportedOperation an idempotency key or coupon asked of a transport without the contract for it
+     * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     */
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null, ?string $coupon = null): CheckoutSession
     {
+        if ($coupon !== null && trim($coupon) !== '') {
+            if (! $this->transport instanceof CouponCheckoutTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, CouponCheckoutTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey, trim($coupon));
+        }
+
         if ($idempotencyKey !== null) {
             if (! $this->transport instanceof IdempotentSessionTransport) {
                 throw UnsupportedOperation::missingContract($this->transport, IdempotentSessionTransport::class, __FUNCTION__);

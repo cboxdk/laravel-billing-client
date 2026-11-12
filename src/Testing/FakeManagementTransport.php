@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Cbox\Billing\Client\Testing;
 
 use Cbox\Billing\Client\Contracts\BundleTransport;
+use Cbox\Billing\Client\Contracts\CouponCheckoutTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSessionTransport;
 use Cbox\Billing\Client\Contracts\IdempotentSubscriptionTransport;
 use Cbox\Billing\Client\Contracts\InvoiceTransport;
@@ -71,6 +72,10 @@ use Illuminate\Http\Client\Request;
  *    no subscription, is a 404 ({@see BillingRefused}); an organization with no subscription
  *    reads as null; a provisioning call without a `name` is a 422.
  *  - Reading an organization (0.6.3) never creates it: one that was never provisioned is a 404.
+ *  - A checkout promo code (0.6.3) must be seeded with {@see withCoupon()}: an unknown code, one
+ *    not valid for the plan, or one on one-off products alone is a 422 ({@see BillingRefused}),
+ *    as the server refuses a code it will not apply. Codes match case-insensitively. Every plan
+ *    checkout is recorded with its coupon in {@see checkoutSessions()}.
  *  - Every invoice listed carries an `id` (0.6.3): the seeded {@see Invoice::$id}, or a stable
  *    stand-in `inv_…` derived from the organization and number, since the server always sends one.
  *  - Subscribe answers `payment_intent: null`, as the server does today.
@@ -100,7 +105,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, CouponCheckoutTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     use InteractsWithResourceLimits;
 
@@ -195,6 +200,12 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     private bool $sessionsExpired = false;
 
     private bool $requireProvisioned = false;
+
+    /** @var array<string, list<string>> Seeded promo codes (upper-cased) and the plans each applies to; empty is every plan. */
+    private array $coupons = [];
+
+    /** @var list<array{org: string, plan: string, currency: string|null, coupon: string|null, url: string}> */
+    private array $checkoutSessions = [];
 
     private int $intentSeq = 0;
 
@@ -348,6 +359,29 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
     }
 
     /**
+     * Seed a promo code a checkout may carry (0.6.3), valid for the given plans or, with none
+     * named, for every plan. A code the fake was not given is refused with a 422, as the
+     * server refuses a code it does not know.
+     */
+    public function withCoupon(string $code, string ...$plans): self
+    {
+        $this->coupons[strtoupper(trim($code))] = array_values($plans);
+
+        return $this;
+    }
+
+    /**
+     * Every plan checkout the fake opened, oldest first, with the coupon it carried (upper-cased,
+     * as Billing stores it) — for asserting an app passed the code the customer typed.
+     *
+     * @return list<array{org: string, plan: string, currency: string|null, coupon: string|null, url: string}>
+     */
+    public function checkoutSessions(): array
+    {
+        return $this->checkoutSessions;
+    }
+
+    /**
      * Make every checkout session the fake mints come back already expired, so a test can
      * drive {@see CheckoutSession::isExpired()} without waiting on the clock.
      */
@@ -491,9 +525,9 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         return $this->wire()->createOneOffCheckoutSession($org, $items, $returnUrl, $reference, $idempotencyKey, $currency);
     }
 
-    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null): CheckoutSession
+    public function createCheckoutSession(string $org, string $plan, string $returnUrl, ?string $currency = null, ?string $idempotencyKey = null, ?string $coupon = null): CheckoutSession
     {
-        return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey);
+        return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey, $coupon);
     }
 
     public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null, ?PortalSection $section = null, ?string $invoice = null, ?string $subscription = null): PortalSession
@@ -1226,7 +1260,13 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             return FakeResponse::error(404, 'Unknown organization.');
         }
 
+        $coupon = trim($this->string($payload, 'coupon'));
+        $plan = $this->string($payload, 'plan');
+
         if (isset($payload['items']) && is_array($payload['items'])) {
+            if ($coupon !== '' && $plan === '') {
+                return FakeResponse::error(422, 'A promo code discounts a plan; one-off products alone take none.');
+            }
             if ($payload['items'] === []) {
                 return FakeResponse::error(422, 'At least one item is required.');
             }
@@ -1250,14 +1290,39 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
             return FakeResponse::json(['url' => 'https://billing.example/checkout/'.rawurlencode($org).'/'.(++$this->sessionSeq), 'expires_at' => $expires], 201);
         }
 
-        if (! isset($this->plans[$this->string($payload, 'plan')])) {
+        if (! isset($this->plans[$plan])) {
             return FakeResponse::error(404, 'Unknown plan.');
         }
 
+        $code = null;
+
+        if ($coupon !== '') {
+            $code = strtoupper($coupon);
+            $plans = $this->coupons[$code] ?? null;
+
+            if ($plans === null) {
+                return FakeResponse::error(422, sprintf('Unknown promo code [%s].', $coupon));
+            }
+
+            if ($plans !== [] && ! in_array($plan, $plans, true)) {
+                return FakeResponse::error(422, sprintf('Promo code [%s] does not apply to this plan.', $code));
+            }
+        }
+
         $now = new DateTimeImmutable;
+        $url = 'https://billing.example/checkout/'.rawurlencode($org).'/'.(++$this->sessionSeq);
+        $currency = $this->string($payload, 'currency');
+
+        $this->checkoutSessions[] = [
+            'org' => $org,
+            'plan' => $plan,
+            'currency' => $currency === '' ? null : $currency,
+            'coupon' => $code,
+            'url' => $url,
+        ];
 
         return FakeResponse::json([
-            'url' => 'https://billing.example/checkout/'.rawurlencode($org).'/'.(++$this->sessionSeq),
+            'url' => $url,
             'expires_at' => $this->date($this->sessionsExpired ? $now->modify('-1 minute') : $now->modify('+30 minutes')),
         ], 201);
     }
