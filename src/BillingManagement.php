@@ -12,10 +12,12 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
+use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -50,6 +52,7 @@ use Cbox\Billing\Client\ValueObjects\UsageEventReceipt;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeInterface;
 use Generator;
+use InvalidArgumentException;
 
 /**
  * The app-facing self-service billing client — what a product app calls to let ITS
@@ -488,10 +491,33 @@ class BillingManagement
      * Open a billing-portal session (ADR-0009 path A) for `org`, returning the `url` to
      * redirect the user to.
      *
+     * `section` (since 0.6.1) opens a page or a Settings section instead of the overview: send
+     * the customer to `PaymentMethods` or `BillingDetails` rather than keeping a form in the app.
+     * `PendingPayment` opens the pay page of the `invoice` (`inv_…` or its number), or of the
+     * newest unpaid invoice of the `subscription` (`sub_…`), where the customer completes 3-D
+     * Secure; Billing then returns to `returnUrl` with `billing_payment=paid|open` and
+     * `billing_invoice={number}` added. Only the fields given are sent, and a call without them
+     * is exactly the call before 0.6.1.
+     *
+     * @throws InvalidArgumentException an unknown section, `PendingPayment` without an invoice or subscription, or either without `PendingPayment`
+     * @throws UnsupportedOperation a section asked of a transport that does not implement PortalSectionTransport
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
      */
-    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null, PortalSection|string|null $section = null, ?string $invoice = null, ?string $subscription = null): PortalSession
     {
+        if ($section !== null || $invoice !== null || $subscription !== null) {
+            if (! $this->transport instanceof PortalSectionTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, PortalSectionTransport::class, __FUNCTION__);
+            }
+
+            if (is_string($section)) {
+                $section = PortalSection::tryFrom($section)
+                    ?? throw new InvalidArgumentException("Unknown portal section [{$section}].");
+            }
+
+            return $this->transport->createPortalSession($org, $returnUrl, $idempotencyKey, $section, $invoice, $subscription);
+        }
+
         if ($idempotencyKey !== null) {
             if (! $this->transport instanceof IdempotentSessionTransport) {
                 throw UnsupportedOperation::missingContract($this->transport, IdempotentSessionTransport::class, __FUNCTION__);

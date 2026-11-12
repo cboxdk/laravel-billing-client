@@ -63,6 +63,72 @@ return redirect()->away($portal->url);
 
 `PortalSession` carries just the `url`. As with checkout, mint one per visit.
 
+### Open the portal at the right page
+
+Since 0.6.1, `section` opens a page or a Settings section instead of the overview, so an
+"Update your card" or "Change billing details" link lands on that form in the portal rather
+than on a form your app keeps:
+
+```php
+use Cbox\Billing\Client\Enums\PortalSection;
+
+$portal = BillingManager::createPortalSession(
+    $org,
+    returnUrl: route('billing.account'),
+    section: PortalSection::PaymentMethods,
+);
+```
+
+| `PortalSection` | Opens |
+| --- | --- |
+| `Overview` (the default) | the portal's overview |
+| `Subscriptions`, `Invoices`, `Settings` | that page |
+| `PaymentMethods` | Settings, at the payment methods |
+| `BillingDetails` | Settings, at the billing details |
+| `PendingPayment` | the pay page of one invoice (below) |
+
+The string values (`'payment_methods'`, …) are accepted too; an unknown one throws an
+`InvalidArgumentException` before anything is sent. A call without `section` sends exactly
+what 0.6.0 sent. The server needs to know `section` (Billing from 2026-11-12); an older one
+opens the overview.
+
+### Take a payment that waits on the customer
+
+When a plan's first charge needs 3-D Secure, or a card was declined, send the customer to the
+pay page of that invoice. Name the invoice (`inv_…` or its number), or the subscription
+(`sub_…`) and Billing picks its newest unpaid invoice:
+
+```php
+$portal = BillingManager::createPortalSession(
+    $org,
+    returnUrl: route('billing.account'),
+    section: PortalSection::PendingPayment,
+    subscription: $subscriptionId,
+);
+
+return redirect()->away($portal->url);
+```
+
+The page runs the challenge, and once the invoice is paid sends the customer back to
+`returnUrl` with `billing_payment=paid` and `billing_invoice={number}` added. Its back link
+carries `billing_payment=open`. Treat the parameter as a hint for the message you show, and
+read the invoice (or wait for the webhook) for the final word:
+
+```php
+if ($request->query('billing_payment') === 'paid') {
+    $invoice = BillingManager::invoice($org, (string) $request->query('billing_invoice'));
+}
+```
+
+`PendingPayment` without an `invoice` or `subscription`, or either of them with another
+section, throws an `InvalidArgumentException` before anything is sent. Billing answers 404
+for an invoice or subscription that is not the organization's, and 409 when the subscription
+owes nothing; both arrive as a `BillingRefused`.
+
+Sections need a transport that implements `PortalSectionTransport`. `HttpManagementTransport`
+and `FakeManagementTransport` do; a transport of your own written against 0.6.0 keeps working
+for calls without a section and throws `UnsupportedOperation` for one with it.
+
 ## Deny-by-default
 
 Both calls throw a `TransportException` if the management API is unreachable

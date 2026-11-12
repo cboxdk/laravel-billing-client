@@ -11,10 +11,12 @@ use Cbox\Billing\Client\Contracts\InvoiceTransport;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
+use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Enums\TaxBasis;
 use Cbox\Billing\Client\Enums\TaxStatus;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
@@ -94,7 +96,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     use InteractsWithResourceLimits;
 
@@ -485,9 +487,9 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
         return $this->wire()->createCheckoutSession($org, $plan, $returnUrl, $currency, $idempotencyKey);
     }
 
-    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null, ?PortalSection $section = null, ?string $invoice = null, ?string $subscription = null): PortalSession
     {
-        return $this->wire()->createPortalSession($org, $returnUrl, $idempotencyKey);
+        return $this->wire()->createPortalSession($org, $returnUrl, $idempotencyKey, $section, $invoice, $subscription);
     }
 
     public function createSetupIntent(string $org): SetupIntent
@@ -1243,8 +1245,23 @@ class FakeManagementTransport implements BundleTransport, IdempotentSessionTrans
      */
     private function portalSession(array $payload): FakeResponse
     {
+        $base = 'https://billing.example/portal/'.rawurlencode($this->string($payload, 'org')).'/'.(++$this->sessionSeq);
+        $section = PortalSection::tryFrom(is_string($payload['section'] ?? null) ? $payload['section'] : '') ?? PortalSection::Overview;
+
+        // Billing's own layout: a page, Settings at an anchor, or an invoice's pay page that
+        // returns to the app once paid (`?then=return`).
+        $url = match ($section) {
+            PortalSection::Overview => $base,
+            PortalSection::Subscriptions => $base.'/subscriptions',
+            PortalSection::Invoices => $base.'/invoices',
+            PortalSection::Settings => $base.'/settings',
+            PortalSection::PaymentMethods => $base.'/settings#payment',
+            PortalSection::BillingDetails => $base.'/settings#billing-details',
+            PortalSection::PendingPayment => $base.'/invoices/'.rawurlencode($this->string($payload, 'invoice') !== '' ? $this->string($payload, 'invoice') : 'latest-'.$this->string($payload, 'subscription')).'/pay?then=return',
+        };
+
         return FakeResponse::json([
-            'url' => 'https://billing.example/portal/'.rawurlencode($this->string($payload, 'org')).'/'.(++$this->sessionSeq),
+            'url' => $url,
             'expires_at' => $this->date((new DateTimeImmutable)->modify('+30 minutes')),
         ], 201);
     }

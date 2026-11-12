@@ -162,7 +162,7 @@ Like the enforcement path, the network lives behind one contract — `Management
 | `createInvoice($org, $invoice, $idempotencyKey)` ² | `POST /v1/invoices/{org}` |
 | `invoice($org, $number)` ² | `GET /v1/invoices/{org}/{number}` |
 | `createCheckoutSession($org, $plan, $returnUrl, ?$currency)` | `POST /v1/checkout-sessions` |
-| `createPortalSession($org, $returnUrl)` | `POST /v1/portal-sessions` |
+| `createPortalSession($org, $returnUrl, ?$idempotencyKey, ?$section, ?$invoice, ?$subscription)` ³ | `POST /v1/portal-sessions` |
 | `createSetupIntent($org)` | `POST /v1/setup-intents` |
 | `createPaymentIntent($org, ?$reference, ?$amountMinor, ?$currency)` | `POST /v1/payment-intents` |
 | `paymentMethods($org)` | `GET /v1/payment-methods/{org}` |
@@ -176,6 +176,10 @@ implements `ManagementTransport` throws `UnsupportedOperation`; nothing is sent.
 
 ² Added in 0.4.7 on a separate contract, `InvoiceTransport`, with the same compatibility rule as
 ¹: a transport that does not implement it makes `BillingManagement` throw `UnsupportedOperation`.
+
+³ `section`, `invoice` and `subscription` were added in 0.6.1 on a separate contract,
+`PortalSectionTransport`: only a call that uses them needs it. See
+[open the portal at the right page](../cookbook/hosted-checkout.md#open-the-portal-at-the-right-page).
 
 Every call authenticates with the configured bearer token. The transport is **bound only
 when a base URL and token are configured** — otherwise the host binds its own (e.g. the

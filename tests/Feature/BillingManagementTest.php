@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Cbox\Billing\Client\BillingManagement;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
+use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Exceptions\UnsupportedOperation;
@@ -337,7 +338,7 @@ it('refuses createInvoice on a transport without the contract', function (): voi
 
         public function createPortalSession(string $org, string $returnUrl): PortalSession
         {
-            throw new LogicException;
+            return new PortalSession('https://billing.test/portal/'.$org);
         }
 
         public function createSetupIntent(string $org): SetupIntent
@@ -363,5 +364,9 @@ it('refuses createInvoice on a transport without the contract', function (): voi
 
     expect(fn () => $management->createInvoice('org_a', new NewInvoice([new NewInvoiceLine('x', '1', 100)]), 'k'))
         ->toThrow(UnsupportedOperation::class, 'createInvoice() needs a transport that implements')
-        ->and(fn () => $management->invoice('org_a', 'INV-1'))->toThrow(UnsupportedOperation::class);
+        ->and(fn () => $management->invoice('org_a', 'INV-1'))->toThrow(UnsupportedOperation::class)
+        // A transport from before 0.6.1 still opens the portal; only a section needs the new contract.
+        ->and($management->createPortalSession('org_a', 'https://app.test')->url)->toBe('https://billing.test/portal/org_a')
+        ->and(fn () => $management->createPortalSession('org_a', 'https://app.test', section: PortalSection::Invoices))
+        ->toThrow(UnsupportedOperation::class, 'createPortalSession() needs a transport that implements');
 });
