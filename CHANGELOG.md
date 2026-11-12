@@ -8,8 +8,9 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [0.6.3] - 2026-11-12
 
-Read the billing details without writing them, pass a promo code to a hosted checkout, and keep
-an invoice's public id. Additive: every existing call sends what it sent before.
+Read the billing details without writing them, pass a promo code to a hosted checkout, keep the
+public ids of invoices and subscriptions, and follow a first charge that is stuck on 3-D Secure.
+Additive: every existing call sends what it sent before.
 
 ### Added
 
@@ -40,6 +41,27 @@ an invoice's public id. Additive: every existing call sends what it sent before.
   `invoices()` lists, as the last, optional constructor parameter. An empty string means the
   server sent no id (an older Billing). `IssuedInvoice::$id` keeps its `string` type. The fake
   lists the seeded id, or a stable stand-in derived from the organization and number.
+- `SubscriptionResult::$invoice` (`?ChargedInvoice`): the opening invoice a subscribe issued and
+  what its off-session charge did: `id` (`inv_…`), `number`, `status`, `amountDueMinor`,
+  `currency` and `payment`, an `Enums\InvoicePayment` (`Paid`, `Pending`, `NoneDue`). `Pending`
+  means the customer has to act (3-D Secure, a declined card, bank transfer): open
+  `createPortalSession(section: PortalSection::PendingPayment, invoice: $invoice->id)`. Null when
+  nothing was billed (a trial) and from a server that does not send it. A `payment` value this
+  client does not know reads as `Pending`.
+- `ChangePreview::$invoice` (`?ChargedInvoice`): the prorated invoice an upgrade applied now by
+  `changePlan()` charged. Null for a preview, a scheduled change, or nothing due now.
+- `Subscription::$id` (`string`, default `''`): Billing's public id (`sub_…`). An empty string
+  means the server sent no id (an older Billing). Kept subscription answers keep it.
+- The fake answers the charged invoice on subscribe and on an upgrade (`paid`, or `none_due` for a
+  zero amount), lists it in `invoices()`, and gives every subscription an `id`.
+  `chargesPending()` leaves those charges `pending`, to test the 3-D Secure flow.
+- `invoice` needs a Billing server with cboxdk/cbox-billing#384; until then it reads null.
+
+### Changed
+
+- The subscribe cookbook no longer branches on `requiresPayment()`: Billing answers
+  `payment_intent: null` on every subscribe (the field is reserved), so it was always false. Follow
+  `$result->invoice` instead.
 
 ## [0.6.2] - 2026-11-12
 

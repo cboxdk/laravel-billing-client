@@ -70,6 +70,12 @@ an unknown number is a 404.
 Every invoice `invoices($org)` lists has an `id` (0.6.3), as on the server: the one you seeded on
 the `Invoice`, or a stable `inv_…` stand-in derived from the organization and number.
 
+Subscribe and an immediate plan change answer the invoice they charged (0.6.3): `paid`, or
+`none_due` for a zero amount. `chargesPending()` leaves every such charge `pending`, as when the bank
+asks for 3-D Secure, so you can test sending the customer to the portal's pending-payment page; the
+invoice is listed by `invoices()` with the same `id`. Every subscription the fake answers carries an
+`id` (`sub_…`).
+
 Checkout promo codes (0.6.3) are seeded with `withCoupon($code, ...$plans)`; an unknown code, one
 not valid for the plan, or one on one-off products alone is a 422. `checkoutSessions()` lists every
 plan checkout the fake opened with its org, plan, currency and coupon.

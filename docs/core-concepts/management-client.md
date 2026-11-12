@@ -26,7 +26,7 @@ BillingManager::ensureOrganization('org_42', [
 
 $plans = BillingManager::plans('USD');                  // list<Plan>, priced in USD
 $current = BillingManager::subscription('org_42');      // ?Subscription
-$result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult (payment intent: null today)
+$result = BillingManager::subscribe('org_42', 'pro');   // SubscriptionResult: ->invoice says what the charge did
 $preview = BillingManager::previewChange('org_42', 'scale');
 $updated = BillingManager::changePlan('org_42', 'scale');
 $canceled = BillingManager::cancel('org_42', atPeriodEnd: true);
@@ -144,7 +144,10 @@ coupon, `tax`, and `totalMinor()`), a change preview splits what is due now
 (`dueNowMinor` includes tax, `dueNowNetMinor`, `dueNowTaxMinor`, `dueNowTax`) and taxes the new
 price (`newRecurringTax`), and an invoice has `subtotalMinor` and `taxMinor` beside its total
 `amountMinor`. Since 0.6.3 a listed `Invoice` also carries `id`, Billing's public id (`inv_…`):
-the stable handle to link or store, where `number` is what the customer reads. It is an empty
+the stable handle to link or store, where `number` is what the customer reads. A subscribe's
+`$result->invoice` (and an upgrade's `$change->invoice`) is the invoice it charged, with `payment`
+`Paid`, `NoneDue` or `Pending`; on `Pending` open the portal's `PendingPayment` section for that
+invoice id. See [subscribe](../cookbook/subscribe-change-cancel.md#subscribe). It is an empty
 string from a server that does not send it (an older Billing).
 
 Naming a buyer needs a transport that implements `Contracts\TaxedPlanTransport`, as the HTTP
