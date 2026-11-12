@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Illuminate\Http\Client\Factory as HttpFactory;
@@ -49,6 +50,40 @@ it('creates a portal session over HTTP', function (): void {
 
     Http::assertSent(fn (Request $request): bool => $request->url() === 'https://billing.test/api/v1/portal-sessions'
         && $request['return_url'] === 'https://app.test/account');
+});
+
+it('sends only the portal fields it is given', function (): void {
+    Http::fake(['billing.test/api/v1/portal-sessions' => Http::response(['url' => 'https://billing.test/portal/x'], 201)]);
+
+    paymentsHttp()->createPortalSession('org_a', 'https://app.test/account');
+    paymentsHttp()->createPortalSession('org_a', 'https://app.test/account', section: PortalSection::BillingDetails);
+    paymentsHttp()->createPortalSession('org_a', 'https://app.test/account', 'pay-1', PortalSection::PendingPayment, invoice: 'inv_1');
+    paymentsHttp()->createPortalSession('org_a', 'https://app.test/account', section: PortalSection::PendingPayment, subscription: 'sub_1');
+
+    $bodies = Http::recorded()->map(fn (array $pair): array => $pair[0]->data())->all();
+
+    expect($bodies)->toBe([
+        ['org' => 'org_a', 'return_url' => 'https://app.test/account'],
+        ['org' => 'org_a', 'return_url' => 'https://app.test/account', 'section' => 'billing_details'],
+        ['org' => 'org_a', 'return_url' => 'https://app.test/account', 'section' => 'pending_payment', 'invoice' => 'inv_1'],
+        ['org' => 'org_a', 'return_url' => 'https://app.test/account', 'section' => 'pending_payment', 'subscription' => 'sub_1'],
+    ]);
+    Http::assertSent(fn (Request $request): bool => $request->hasHeader('Idempotency-Key', 'pay-1') && $request['invoice'] === 'inv_1');
+});
+
+it('refuses a pending payment without what to pay, and what to pay without a pending payment', function (): void {
+    Http::fake();
+
+    expect(fn () => paymentsHttp()->createPortalSession('org_a', 'https://app.test', section: PortalSection::PendingPayment))
+        ->toThrow(InvalidArgumentException::class, 'needs an invoice or a subscription')
+        ->and(fn () => paymentsHttp()->createPortalSession('org_a', 'https://app.test', section: PortalSection::PendingPayment, invoice: ''))
+        ->toThrow(InvalidArgumentException::class)
+        ->and(fn () => paymentsHttp()->createPortalSession('org_a', 'https://app.test', section: PortalSection::Invoices, invoice: 'inv_1'))
+        ->toThrow(InvalidArgumentException::class, 'only sent with the pending_payment section')
+        ->and(fn () => paymentsHttp()->createPortalSession('org_a', 'https://app.test', subscription: 'sub_1'))
+        ->toThrow(InvalidArgumentException::class);
+
+    Http::assertNothingSent();
 });
 
 it('creates a setup intent over HTTP with the gateway descriptor', function (): void {

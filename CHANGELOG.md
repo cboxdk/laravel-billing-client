@@ -4,6 +4,27 @@ All notable changes to `cboxdk/laravel-billing-client`. The package is 0.x: a mi
 release may change behaviour, and every such change is listed with an upgrade note.
 
 
+## [0.6.1] - 2026-11-12
+
+Portal deep links. Additive: every existing call sends what it sent before.
+
+### Added
+
+- `createPortalSession()` takes `section`, `invoice` and `subscription` after the idempotency
+  key: `createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null,
+  PortalSection|string|null $section = null, ?string $invoice = null, ?string $subscription = null)`.
+  `section` opens a portal page or a Settings section (`payment_methods`, `billing_details`)
+  instead of the overview, so an app can drop its own billing forms. `pending_payment` with an
+  `invoice` or a `subscription` opens that invoice's pay page, which runs 3-D Secure and returns
+  to `return_url` with `billing_payment=paid|open` and `billing_invoice` added. Only the fields
+  given are sent. Needs a Billing server that knows `section`; an older one opens the overview.
+- `Enums\PortalSection`, the sections Billing accepts.
+- `Contracts\PortalSectionTransport`, implemented by `HttpManagementTransport` and
+  `FakeManagementTransport`. A transport written against 0.6.0 keeps working for calls without a
+  section; with one, `BillingManagement` throws `UnsupportedOperation`.
+- The fake server answers sections with Billing's URL layout (`/settings#payment`,
+  `/invoices/{invoice}/pay?then=return`).
+
 ## [0.6.0] - 2026-11-11
 
 Billing v2: the API has its own host, and every id is a string.

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\ValueObjects\Entitlement;
 use Cbox\Billing\Client\ValueObjects\PaymentMethod;
@@ -42,6 +43,31 @@ it('opens a billing-portal session', function (): void {
     $session = $this->makeBillingManagement()->createPortalSession('org_a', 'https://app.test/account');
 
     expect($session->url)->toContain('org_a');
+});
+
+it('opens the portal at a page or a Settings section', function (string|PortalSection $section, string $ends): void {
+    $session = $this->makeBillingManagement()->createPortalSession('org_a', 'https://app.test/account', section: $section);
+
+    expect($session->url)->toEndWith($ends);
+})->with([
+    'overview' => [PortalSection::Overview, '/portal/org_a/1'],
+    'invoices' => [PortalSection::Invoices, '/invoices'],
+    'payment methods' => [PortalSection::PaymentMethods, '/settings#payment'],
+    'billing details as a string' => ['billing_details', '/settings#billing-details'],
+]);
+
+it('opens the pay page of a pending invoice that returns to the app', function (): void {
+    $billing = $this->makeBillingManagement();
+
+    expect($billing->createPortalSession('org_a', 'https://app.test/account', section: PortalSection::PendingPayment, invoice: 'inv_1')->url)
+        ->toEndWith('/invoices/inv_1/pay?then=return')
+        ->and($billing->createPortalSession('org_a', 'https://app.test/account', null, 'pending_payment', subscription: 'sub_1')->url)
+        ->toContain('/pay?then=return');
+});
+
+it('refuses an unknown portal section before calling billing', function (): void {
+    expect(fn () => $this->makeBillingManagement()->createPortalSession('org_a', 'https://app.test', section: 'billing'))
+        ->toThrow(InvalidArgumentException::class, 'Unknown portal section [billing].');
 });
 
 // --- Path B: intents & payment methods -------------------------------------------------

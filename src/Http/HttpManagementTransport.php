@@ -12,10 +12,12 @@ use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\OneOffCheckoutTransport;
 use Cbox\Billing\Client\Contracts\OneOffQuoteTransport;
 use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
+use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
+use Cbox\Billing\Client\Enums\PortalSection;
 use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\BillingUnavailable;
 use Cbox\Billing\Client\Exceptions\TransportException;
@@ -74,7 +76,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -732,13 +734,40 @@ class HttpManagementTransport implements BundleTransport, IdempotentSessionTrans
         );
     }
 
-    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null): PortalSession
+    public function createPortalSession(string $org, string $returnUrl, ?string $idempotencyKey = null, ?PortalSection $section = null, ?string $invoice = null, ?string $subscription = null): PortalSession
     {
         $path = '/portal-sessions';
-        $body = $this->postWithHeaders($path, ['org' => $org, 'return_url' => $returnUrl], $this->sessionHeaders($idempotencyKey));
+        $body = $this->postWithHeaders($path, self::portalPayload($org, $returnUrl, $section, $invoice, $subscription), $this->sessionHeaders($idempotencyKey));
         $raw = is_array($body['portal_session'] ?? null) ? $body['portal_session'] : $body;
 
         return new PortalSession(url: $this->stringField($raw, 'url', $path));
+    }
+
+    /**
+     * The portal-session body: only the fields given. `invoice` and `subscription` name what a
+     * {@see PortalSection::PendingPayment} session pays, and mean nothing to any other section.
+     *
+     * @return array<string, string>
+     */
+    private static function portalPayload(string $org, string $returnUrl, ?PortalSection $section, ?string $invoice, ?string $subscription): array
+    {
+        $pays = $section === PortalSection::PendingPayment;
+
+        if ($pays && ($invoice ?? '') === '' && ($subscription ?? '') === '') {
+            throw new InvalidArgumentException('A pending_payment portal session needs an invoice or a subscription.');
+        }
+
+        if (! $pays && ($invoice !== null || $subscription !== null)) {
+            throw new InvalidArgumentException('An invoice or a subscription is only sent with the pending_payment section.');
+        }
+
+        return array_filter([
+            'org' => $org,
+            'return_url' => $returnUrl,
+            'section' => $section?->value,
+            'invoice' => $invoice,
+            'subscription' => $subscription,
+        ], static fn (?string $value): bool => $value !== null);
     }
 
     /** @return array<string,string> */
