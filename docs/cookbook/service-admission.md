@@ -24,7 +24,8 @@ BILLING_CLIENT_ACCESS_URL=
 BILLING_CLIENT_ACCESS_TOKEN=
 ```
 
-Run a queue worker. The background refresh is a queued job.
+Run a queue worker: the background refresh is a queued job. An app without a queue (the
+`sync` connection) runs it after the response has been sent instead.
 
 ## The per-page admission check
 
@@ -43,9 +44,37 @@ use Cbox\Billing\Client\Access\ServiceAccess;
 $allowed = app(ServiceAccess::class)->allows($user->id, $organization->id);
 ```
 
-A page gets the kept answer at once. A stale answer is refreshed in the background. A
-first visit waits for Billing once. A POST, PUT, PATCH or DELETE uses only a fresh
-answer. While Billing is down, a page is served the last answer.
+A page gets a kept "yes" at once, however old within 30 days, and it is refreshed in the
+background. A first visit waits for Billing once. A POST, PUT, PATCH or DELETE uses only a
+fresh answer. A kept "no" is asked again after 5 seconds, so somebody Billing just let in
+is in on their next page. While Billing is down, a page is served the last answer. Asked
+nine times in one request, it reads the cache once.
+
+### Replacing an app's own `BillingAdmissions::allowedFor()`
+
+Apps that copied the registration module call Billing over HTTP in `allowedFor()`. Two
+lines change, and the sign-in callback stops waiting on Billing for everyone who has been
+in before:
+
+```php
+use Cbox\Billing\Client\Access\ServiceAccess;
+use Cbox\Billing\Client\Exceptions\BillingClientException;
+
+public function __construct(private ServiceAccess $access) {}
+
+public function allowedFor(string $subject, string $organization): bool
+{
+    try {
+        return $this->access->forService(config()->string('service-access.service'))->allows($subject, $organization);
+    } catch (BillingClientException) {
+        throw new RegistrationUnavailable;
+    }
+}
+```
+
+The URL and token are read from the `CBOX_SERVICE_ACCESS_URL` and
+`CBOX_SERVICE_ACCESS_TOKEN` the app already sets. After a successful `admit()`, call
+`$this->access->remember($identity->id, $identity->organizationId, true)`.
 
 Pass `acting: true` where the decision has to be current even on a GET, for example the
 step that grants access:
@@ -95,8 +124,36 @@ It returns the same `Subscription` (or null for "no subscription") as
 
 - Before a change that depends on the plan (an upgrade, a limit check on create), pass
   `acting: true`.
-- On the `plan.changed` webhook, call `forget($org->cbox_id)`.
 - After your own subscribe, change or cancel, call `remember($org->cbox_id, $subscription)`.
+
+## Features
+
+```php
+use Cbox\Billing\Client\Kept\KeptFeatures;
+
+$features = app(KeptFeatures::class)->features($org->cbox_id); // FeatureEntitlements
+$features->enabled('sites.custom_domains');
+```
+
+The same `FeatureEntitlements` as `Billing::features()`, kept. Pass `acting: true` before a
+change that the feature gates.
+
+## The webhook
+
+One line in the handler of Billing's webhook, after the signature check, covers admission,
+subscription and features:
+
+```php
+use Cbox\Billing\Client\Kept\KeptChanges;
+
+app(KeptChanges::class)->fromWebhook($event['type'], $event['data']);
+```
+
+A `subscription.*`, `customer.*` or `access.*` event makes every answer kept about that
+organization be asked again on its next use; `plan.changed` does so for all of them. Subscribe
+the endpoint to those events. Without it a revoked organization keeps a page until the
+background refresh has run; see
+[How long a revoked organization keeps access](../core-concepts/kept-answers.md#how-long-a-revoked-organization-keeps-access).
 
 ## Test it
 

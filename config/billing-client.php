@@ -58,14 +58,16 @@ return [
     |               request is served the last answer up to this age.
     |
     | A change (POST, PUT, PATCH, DELETE), `acting: true` and work outside a request never
-    | act on a stale answer. See docs/core-concepts/kept-answers.md.
+    | act on a stale answer. A kept answer from before Billing said its organization changed
+    | (Kept\KeptChanges, fed by the webhook) is asked again. See
+    | docs/core-concepts/kept-answers.md.
     |
     */
 
     'kept' => [
         'fresh_for' => (int) env('BILLING_CLIENT_KEPT_FRESH_FOR', 30),
-        'max_age' => (int) env('BILLING_CLIENT_KEPT_MAX_AGE', 86_400),
-        'keep_for' => (int) env('BILLING_CLIENT_KEPT_KEEP_FOR', 604_800),
+        'max_age' => (int) env('BILLING_CLIENT_KEPT_MAX_AGE', 2_592_000),
+        'keep_for' => (int) env('BILLING_CLIENT_KEPT_KEEP_FOR', 5_184_000),
     ],
 
     /*
@@ -74,8 +76,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | Where the refresh of a stale kept answer and the top-up of a low lease are queued.
-    | Null uses the app's default connection and queue. Use a real queue: on the `sync`
-    | connection the job runs inside the request that queued it.
+    | Null uses the app's default connection and queue. Use a real queue. On the `sync`
+    | connection the job runs after the response has been sent (inline in a command).
     |
     */
 
