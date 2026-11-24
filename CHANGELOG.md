@@ -6,6 +6,23 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-11-24
+
+### Fixed
+
+- A reservation is no longer refused with `QuotaExceeded` while Billing still has allowance.
+  Under concurrency, a refill that waited on the single-flight lock could find the slice
+  refilled and lease nothing, and other reservations could take those units before this one's
+  take, so it was refused without Billing being asked
+  ([cbox-billing#427](https://github.com/cboxdk/cbox-billing/issues/427)). A reservation's
+  refill now takes its units in the same step: from the slice under the lock, or kept back from
+  its own lease's grant. It is refused only when Billing granted less than it needs.
+
+### Added
+
+- `LeaseManager::refillAndTake(string $org, string $meter, int $want): bool`, which the client
+  now uses. `refill()` is unchanged.
+
 ## [0.6.3] - 2026-11-12
 
 Read the billing details without writing them, pass a promo code to a hosted checkout, keep the
