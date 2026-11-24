@@ -86,6 +86,23 @@ class LeaseManager
     }
 
     /**
+     * Refill for a reservation of `$want` units and take them for it in the same step: from
+     * the slice while holding the single-flight lock, or else straight from this refill's own
+     * grant, so no concurrent reservation can take them between the refill and the
+     * reservation's take. Returns false only when Billing granted less than `$want` and the
+     * slice with that grant does not cover it either.
+     *
+     * @throws TransportException when billing cannot be reached, or the breaker is open
+     */
+    public function refillAndTake(string $org, string $meter, int $want): bool
+    {
+        $held = false;
+        $this->refillGuarded($org, $meter, $want, probe: false, held: $held);
+
+        return $held || $this->store->tryTake($org, $meter, $want);
+    }
+
+    /**
      * What the queued {@see RefillLease} runs: top the slice up if it is still at or below
      * the threshold. It ignores an open breaker, because it is the background probe that
      * finds Billing back; its success closes the breaker.
@@ -110,31 +127,39 @@ class LeaseManager
     }
 
     /**
+     * Given `$held` (a reservation's refill), take `$want` for the caller and set `$held`: see
+     * {@see refillAndTake()}.
+     *
+     * @param-out bool $held
+     *
      * @throws TransportException when billing cannot be reached, or the breaker is open
      */
-    private function refillGuarded(string $org, string $meter, int $want, bool $probe): int
+    private function refillGuarded(string $org, string $meter, int $want, bool $probe, ?bool &$held = null): int
     {
+        $claim = $held !== null;
+        $held = false;
         $this->guard($probe);
 
         if ($this->locks === null) {
-            return $this->fetch($org, $meter, $want);
+            return $this->fetch($org, $meter, $want, $claim, $held);
         }
 
         $lock = $this->locks->lock($this->lockPrefix.$org.':'.$meter, $this->lockTtl);
 
         try {
             /** @var int $granted */
-            $granted = $lock->block($this->lockWait, function () use ($org, $meter, $want, $probe): int {
+            $granted = $lock->block($this->lockWait, function () use ($org, $meter, $want, $probe, $claim, &$held): int {
                 // Double-check under the lock: a holder may already have refilled the
-                // slice while we waited — reuse it rather than issue a second lease.
-                if ($this->store->remaining($org, $meter) >= $want) {
+                // slice while we waited — reuse it rather than issue a second lease. A
+                // reservation takes its units here, before anyone else can.
+                if ($claim ? ($held = $this->store->tryTake($org, $meter, $want)) : $this->store->remaining($org, $meter) >= $want) {
                     return 0;
                 }
 
                 // The holder we waited for may just have found Billing away: do not wait again.
                 $this->guard($probe);
 
-                return $this->fetch($org, $meter, $want);
+                return $this->fetch($org, $meter, $want, $claim, $held);
             });
 
             return $granted;
@@ -144,7 +169,7 @@ class LeaseManager
             // over coalescing. Unless the holder just found Billing away.
             $this->guard($probe);
 
-            return $this->fetch($org, $meter, $want);
+            return $this->fetch($org, $meter, $want, $claim, $held);
         }
     }
 
@@ -185,12 +210,16 @@ class LeaseManager
     }
 
     /**
-     * The actual lease round-trip: ask billing for a slice and add the grant locally.
+     * The actual lease round-trip: ask billing for a slice and add the grant locally. With
+     * `$claim`, when the grant covers `$want`, keep `$want` back for the caller and set `$held`.
+     *
+     * @param-out bool $held
      *
      * @throws TransportException when billing cannot be reached
      */
-    private function fetch(string $org, string $meter, int $want): int
+    private function fetch(string $org, string $meter, int $want, bool $claim = false, ?bool &$held = null): int
     {
+        $held = false;
         $size = max($this->leaseSize, $want);
 
         try {
@@ -203,13 +232,22 @@ class LeaseManager
 
         $this->breaker?->reset();
 
-        $this->store->addLease($org, $meter, $grant->granted);
+        $kept = $claim && $grant->granted >= $want ? $want : 0;
+        $this->store->addLease($org, $meter, $grant->granted - $kept);
 
-        if ($grant->granted > 0) {
-            $this->signals->refilled($org, $meter, $grant->granted);
+        try {
+            if ($grant->granted > 0) {
+                $this->signals->refilled($org, $meter, $grant->granted);
+            }
+
+            $this->remember($org, $meter, $size, $grant->granted);
+        } catch (Throwable $e) {
+            // The caller gets the error, not a hold, so its units go to the slice after all.
+            $this->store->addLease($org, $meter, $kept);
+
+            throw $e;
         }
-
-        $this->remember($org, $meter, $size, $grant->granted);
+        $held = $kept > 0;
 
         return $grant->granted;
     }

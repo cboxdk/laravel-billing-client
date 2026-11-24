@@ -632,12 +632,9 @@ class BillingClient
             return true;
         }
 
-        // Slice short — refill (single-flight) then re-take. A refill that fetched
-        // nothing (exhausted) leaves the slice empty, so the re-take fails and the
-        // caller treats it as the hard limit; a refill that granted units (or that a
-        // concurrent holder already applied) lets the re-take succeed.
-        $this->leases->refill($org, $meter, $amount);
-
-        return $this->store->tryTake($org, $meter, $amount);
+        // Slice short — refill (single-flight) and take in the same step, so a concurrent
+        // reservation cannot take the refilled units first. It fails only when Billing
+        // granted less than the hold, which the caller treats as the hard limit.
+        return $this->leases->refillAndTake($org, $meter, $amount);
     }
 }
