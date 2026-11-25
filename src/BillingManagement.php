@@ -16,6 +16,7 @@ use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
+use Cbox\Billing\Client\Contracts\SubscribeOptionsTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
@@ -167,10 +168,26 @@ class BillingManagement
      * Subscribe `org` to `plan`, returning the subscription and any payment intent to
      * confirm.
      *
+     * `reference` names what inside the organization the subscription is for (a Sites website):
+     * one live subscription per product and reference. `billingAnchorDate` is the UTC day it is
+     * first invoiced and renews on: it serves from now and nothing is invoiced when it opens. Billing
+     * takes a day after today and less than one period of the plan away, and refuses it beside a
+     * trial (a BillingRefused with `billing_anchor_date_out_of_range` or
+     * `billing_anchor_date_with_trial`). Either needs a Billing server from 2026-11-25 on.
+     *
      * @throws TransportException a BillingRefused when billing says no, a BillingUnavailable when it cannot answer
+     * @throws UnsupportedOperation when `reference` or `billingAnchorDate` is given and the transport does not implement {@see SubscribeOptionsTransport}
      */
-    public function subscribe(string $org, string $plan, ?string $idempotencyKey = null): SubscriptionResult
+    public function subscribe(string $org, string $plan, ?string $idempotencyKey = null, ?string $reference = null, ?DateTimeInterface $billingAnchorDate = null): SubscriptionResult
     {
+        if ($reference !== null || $billingAnchorDate !== null) {
+            if (! $this->transport instanceof SubscribeOptionsTransport) {
+                throw UnsupportedOperation::missingContract($this->transport, SubscribeOptionsTransport::class, __FUNCTION__);
+            }
+
+            return $this->transport->subscribeWith($org, $plan, $reference, $billingAnchorDate, $idempotencyKey);
+        }
+
         if ($idempotencyKey !== null) {
             if (! $this->transport instanceof IdempotentSubscriptionTransport) {
                 throw UnsupportedOperation::missingContract($this->transport, IdempotentSubscriptionTransport::class, __FUNCTION__);

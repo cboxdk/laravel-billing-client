@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Facade;
  * @method static \Cbox\Billing\Client\ValueObjects\OrganizationProfile organizationProfile(string $org)
  * @method static void ensureOrganization(string $org, array{name: string, billing_email?: string|null, billing_country?: string|null, billing_currency?: string|null, purchaser_type?: string|null, ean_number?: string|null, order_reference?: string|null} $attributes)
  * @method static ?Subscription subscription(string $org)
- * @method static SubscriptionResult subscribe(string $org, string $plan)
+ * @method static SubscriptionResult subscribe(string $org, string $plan, ?string $idempotencyKey = null, ?string $reference = null, ?\DateTimeInterface $billingAnchorDate = null)
  * @method static ChangePreview previewChange(string $org, string $plan)
  * @method static ChangePreview changePlan(string $org, string $plan)
  * @method static Subscription cancel(string $org, bool $atPeriodEnd = true)
