@@ -6,6 +6,11 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-11-25
+
+Subscribe for one thing inside an organization, and open a subscription that is first invoiced on
+a chosen day. Additive: every existing call sends what it sent before.
+
 ### Added
 
 - `subscribe()` on `BillingManagement` and the `BillingManager` facade takes `reference` and
