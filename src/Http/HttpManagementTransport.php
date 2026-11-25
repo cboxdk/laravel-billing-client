@@ -16,6 +16,7 @@ use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
+use Cbox\Billing\Client\Contracts\SubscribeOptionsTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
@@ -61,6 +62,7 @@ use Cbox\Billing\Client\ValueObjects\UsagePrice;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
 use DateTimeInterface;
+use DateTimeZone;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\PendingRequest;
@@ -78,7 +80,7 @@ use Throwable;
  * value pulled off the wire is validated and cast explicitly; a missing or wrong-typed
  * required field is a malformed response, not a silent default.
  */
-class HttpManagementTransport implements BundleTransport, CouponCheckoutTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class HttpManagementTransport implements BundleTransport, CouponCheckoutTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OneOffQuoteTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscribeOptionsTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     public function __construct(
         private readonly HttpFactory $http,
@@ -217,7 +219,21 @@ class HttpManagementTransport implements BundleTransport, CouponCheckoutTranspor
 
     public function subscribe(string $org, string $plan, ?string $idempotencyKey = null): SubscriptionResult
     {
-        $body = $this->postWithHeaders('/subscriptions', ['org' => $org, 'plan' => $plan], $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]);
+        return $this->subscribeWith($org, $plan, null, null, $idempotencyKey);
+    }
+
+    public function subscribeWith(string $org, string $plan, ?string $reference, ?DateTimeInterface $billingAnchorDate, ?string $idempotencyKey = null): SubscriptionResult
+    {
+        if ($idempotencyKey !== null && ($idempotencyKey === '' || strlen($idempotencyKey) > 190)) {
+            throw new InvalidArgumentException('Idempotency key must contain 1–190 bytes.');
+        }
+
+        // Only what was asked for is sent, so a plain subscribe sends what it always has.
+        $payload = ['org' => $org, 'plan' => $plan]
+            + ($reference === null ? [] : ['reference' => $reference])
+            + ($billingAnchorDate === null ? [] : ['billing_anchor_date' => DateTimeImmutable::createFromInterface($billingAnchorDate)->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d')]);
+
+        $body = $this->postWithHeaders('/subscriptions', $payload, $idempotencyKey === null ? [] : ['Idempotency-Key' => $idempotencyKey]);
 
         $rawSubscription = $body['subscription'] ?? null;
 

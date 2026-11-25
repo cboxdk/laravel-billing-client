@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Cbox\Billing\Client\BillingManagement;
 use Cbox\Billing\Client\Enums\InvoicePayment;
 use Cbox\Billing\Client\Enums\PortalSection;
+use Cbox\Billing\Client\Exceptions\BillingRefused;
 use Cbox\Billing\Client\Exceptions\TransportException;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Cbox\Billing\Client\Http\SubscriptionPayload;
@@ -144,4 +146,48 @@ it('answers the prorated invoice of an upgrade', function (): void {
 
     expect($change->invoice?->payment)->toBe(InvoicePayment::Paid)
         ->and($change->invoice?->amountDueMinor)->toBe($change->dueNowMinor);
+});
+
+// --- Reference and billing anchor date (0.6.5) --------------------------------------------
+
+it('sends reference and the anchor date as a UTC day, and nothing extra on a plain subscribe', function (): void {
+    Http::fake(['billing.test/api/v1/subscriptions' => Http::response(subscribedBody(['invoice' => null]), 201)]);
+
+    // 00:30 in Copenhagen on 15 December is still 14 December in UTC, the day Billing reads.
+    $anchor = new DateTimeImmutable('2026-12-15 00:30', new DateTimeZone('Europe/Copenhagen'));
+    $billing = new BillingManagement(subscribeHttp());
+
+    $billing->subscribe('org_a', 'sites-standard', reference: 'site_8f2k', billingAnchorDate: $anchor);
+    $billing->subscribe('org_a', 'pro');
+
+    $bodies = Http::recorded()->map(fn (array $pair): array => $pair[0]->data())->all();
+
+    expect($bodies)->toBe([
+        ['org' => 'org_a', 'plan' => 'sites-standard', 'reference' => 'site_8f2k', 'billing_anchor_date' => '2026-12-14'],
+        ['org' => 'org_a', 'plan' => 'pro'],
+    ]);
+});
+
+it('simulates an anchor date: serving now, no invoice, renewing on that day, and refuses one out of range', function (): void {
+    $billing = $this->makeBillingManagement();
+    $utc = new DateTimeZone('UTC');
+    $anchor = (new DateTimeImmutable('today', $utc))->modify('+10 days');
+
+    $result = $billing->subscribe('org_a', 'pro', reference: 'site_1', billingAnchorDate: $anchor);
+
+    expect($result->invoice)->toBeNull()
+        ->and($result->subscription->status)->toBe('active')
+        ->and($result->subscription->renewsAt?->format('Y-m-d'))->toBe($anchor->format('Y-m-d'))
+        ->and($billing->invoices('org_a'))->toBe([]);
+
+    $refused = null;
+
+    try {
+        $billing->subscribe('org_b', 'pro', billingAnchorDate: new DateTimeImmutable('today', $utc));
+    } catch (BillingRefused $e) {
+        $refused = $e;
+    }
+
+    expect($refused?->status)->toBe(422)
+        ->and((string) $refused?->body)->toContain('billing_anchor_date_out_of_range');
 });

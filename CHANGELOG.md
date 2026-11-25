@@ -6,6 +6,32 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-11-25
+
+Subscribe for one thing inside an organization, and open a subscription that is first invoiced on
+a chosen day. Additive: every existing call sends what it sent before.
+
+### Added
+
+- `subscribe()` on `BillingManagement` and the `BillingManager` facade takes `reference` and
+  `billingAnchorDate`, as named arguments after `idempotencyKey`:
+  - `reference` names what inside the organization the subscription is for, such as a Sites
+    website: one live subscription per product and reference.
+  - `billingAnchorDate` (`DateTimeInterface`) is the day it is first invoiced and renews on. It
+    serves from now and nothing is invoiced when it opens (`$result->invoice` is null). It is
+    sent as that instant's UTC day. Billing takes a day after today and less than one period of
+    the plan away, and refuses it beside a trial: a `BillingRefused` with status 422 and
+    `billing_anchor_date_out_of_range` (with `earliest` and `latest`) or
+    `billing_anchor_date_with_trial`.
+  Both need a Billing server with them (cbox-billing #448, 2026-11-25). A subscribe without them
+  sends what it sent before.
+- `Contracts\SubscribeOptionsTransport` (`subscribeWith()`), a separate contract so a transport
+  written against an earlier release keeps compiling. `HttpManagementTransport` and
+  `FakeManagementTransport` implement it; `subscribe()` with either argument throws an
+  `UnsupportedOperation` when the transport does not.
+- `FakeManagementTransport` takes a `billing_anchor_date` as the server does: no opening invoice,
+  `renewsAt` on that day, and a 422 out of range.
+
 ## [0.6.4] - 2026-11-24
 
 ### Fixed

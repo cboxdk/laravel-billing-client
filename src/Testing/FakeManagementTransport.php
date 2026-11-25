@@ -15,6 +15,7 @@ use Cbox\Billing\Client\Contracts\OrganizationProfileTransport;
 use Cbox\Billing\Client\Contracts\OrganizationReadTransport;
 use Cbox\Billing\Client\Contracts\PortalSectionTransport;
 use Cbox\Billing\Client\Contracts\ResourceLimitTransport;
+use Cbox\Billing\Client\Contracts\SubscribeOptionsTransport;
 use Cbox\Billing\Client\Contracts\SubscriptionTransport;
 use Cbox\Billing\Client\Contracts\TaxedPlanTransport;
 use Cbox\Billing\Client\Contracts\UsageEventTransport;
@@ -54,6 +55,7 @@ use Cbox\Billing\Client\ValueObjects\UsageEventReceipt;
 use Cbox\Billing\Client\ValueObjects\UsageSummary;
 use DateTimeImmutable;
 use DateTimeInterface;
+use DateTimeZone;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Http\Client\Request;
@@ -111,7 +113,7 @@ use Illuminate\Http\Client\Request;
  * {@see requireProvisionedOrganizations()} to also refuse a subscribe or checkout for an
  * organization that was never provisioned, as the server does.
  */
-class FakeManagementTransport implements BundleTransport, CouponCheckoutTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
+class FakeManagementTransport implements BundleTransport, CouponCheckoutTransport, IdempotentSessionTransport, IdempotentSubscriptionTransport, InvoiceTransport, ManagementTransport, OneOffCheckoutTransport, OrganizationProfileTransport, OrganizationReadTransport, PortalSectionTransport, ResourceLimitTransport, SubscribeOptionsTransport, SubscriptionTransport, TaxedPlanTransport, UsageEventTransport
 {
     use InteractsWithResourceLimits;
 
@@ -480,6 +482,11 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
         return $this->wire()->subscribe($org, $plan);
     }
 
+    public function subscribeWith(string $org, string $plan, ?string $reference, ?DateTimeInterface $billingAnchorDate, ?string $idempotencyKey = null): SubscriptionResult
+    {
+        return $this->wire()->subscribeWith($org, $plan, $reference, $billingAnchorDate, $idempotencyKey);
+    }
+
     public function previewChange(string $org, string $plan): ChangePreview
     {
         return $this->wire()->previewChange($org, $plan);
@@ -781,6 +788,28 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
 
         $now = new DateTimeImmutable;
         $end = $now->modify('+1 month');
+        // A billing anchor date, as the server takes it: after today and less than a month away
+        // (every fake plan is monthly). It serves from now and invoices nothing until that day.
+        $anchor = $this->string($payload, 'billing_anchor_date');
+
+        if ($anchor !== '') {
+            $utc = new DateTimeZone('UTC');
+            $today = new DateTimeImmutable('today', $utc);
+            $latest = $today->modify('+1 month -1 day');
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', $anchor, $utc);
+
+            if ($date === false || $date <= $today || $date > $latest) {
+                return FakeResponse::json([
+                    'error' => 'billing_anchor_date_out_of_range',
+                    'message' => 'The billing anchor date must be after today and less than one billing period of the plan away.',
+                    'earliest' => $today->modify('+1 day')->format('Y-m-d'),
+                    'latest' => $latest->format('Y-m-d'),
+                ], 422);
+            }
+
+            $end = $date;
+        }
+
         $subscription = new Subscription($key, 'active', $now, $end, $end);
 
         $this->subscriptions[$org] = $subscription;
@@ -792,8 +821,8 @@ class FakeManagementTransport implements BundleTransport, CouponCheckoutTranspor
         return FakeResponse::json([
             'subscription' => $this->presentSubscription($org, $subscription),
             'coupon' => null,
-            // The opening period, invoiced and charged off-session.
-            'invoice' => $this->charge($org, $due, $plan->currency),
+            // The opening period, invoiced and charged off-session; nothing before an anchor date.
+            'invoice' => $anchor !== '' ? null : $this->charge($org, $due, $plan->currency),
             // Reserved: the server always answers null.
             'payment_intent' => null,
         ], 201);

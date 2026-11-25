@@ -67,6 +67,32 @@ return redirect()->route('billing.done');
 | `payment === InvoicePayment::Pending` | Still owed. The customer completes 3-D Secure, replaces the card or pays on the portal's pay page for that invoice; Billing returns them to `returnUrl` with `billing_payment=paid\|open`. |
 | `null` | Nothing was billed: a trial (billed when it converts), billing details still missing, or a server older than the field. |
 
+### One subscription per website, and a first invoice on a chosen day
+
+`reference` (0.6.5) subscribes something inside the organization, such as one website; an
+organization holds one live subscription per product and reference. `billingAnchorDate` (0.6.5)
+opens a subscription that serves at once but is first invoiced, and renews, on that day, so
+`$result->invoice` is null. Use it when unused time carries over, such as a website moved to
+another organization: cancel the old subscription immediately (it credits nothing back) and send
+its renewal date.
+
+```php
+$result = BillingManager::subscribe(
+    $org,
+    'sites-standard',
+    idempotencyKey: $transfer->billing_key,
+    reference: $site->id,
+    billingAnchorDate: $old->renewsAt,
+);
+```
+
+Billing takes a day after today and less than one period of the plan away; it is sent as the UTC
+day. A date outside that range, or one beside a trial, is a `BillingRefused` with status 422 and
+`billing_anchor_date_out_of_range` (its body names `earliest` and `latest`) or
+`billing_anchor_date_with_trial`. When the old period began today its renewal is a whole period
+away: send `latest` or no date. The time up to the date counts as paid, so an upgrade inside it
+charges the difference for the days left.
+
 A card that needs 3-D Secure off-session is declined by the gateway, so Billing also opens dunning
 and emails the customer a link to authenticate; sending them to the pay page right away is just
 faster. Use the invoice's `id`, never "the newest open invoice". `paymentIntent` is reserved and
