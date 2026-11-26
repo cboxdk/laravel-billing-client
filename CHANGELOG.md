@@ -6,6 +6,17 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.6.6] - 2026-11-26
+
+### Added
+
+- `Contracts\SponsoredCapacityTransport`, its container-bound HTTP implementation,
+  typed `CapacityClaim`/`CapacityAllocation`, and a scripted testing fake. Six provider
+  operations reserve, inspect, settle, cancel and release durable capacity against an
+  operator-approved finite Billing agreement. Separate from local leases and customer
+  subscriptions; no automatic retries, TTL reclamation or fail-open fallback. Requires
+  the new server API and explicit provider `capacity:read`/`capacity:write` scopes.
+
 ### Changed
 
 - Approval request ids are `blapr_…` (they were `apr_…`): Billing renamed the contested `apr`

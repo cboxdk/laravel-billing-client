@@ -14,3 +14,4 @@ description: The two-tier lease, cumulative self-correcting reporting, the failu
 - [Reservation TTL & recovery](reservation-ttl.md) — reclaiming abandoned holds after a crash.
 - [Management client](management-client.md) — the typed self-service billing seam.
 - [Kept answers](kept-answers.md) — admission and subscription reads that never wait on Billing.
+- [Sponsored provider capacity](sponsored-capacity.md) — durable finite holds, settlement and deletion-based release.

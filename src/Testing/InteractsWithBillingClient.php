@@ -52,6 +52,8 @@ trait InteractsWithBillingClient
 
     private ?FakeManagementTransport $billingManagementTransport = null;
 
+    private ?FakeSponsoredCapacityTransport $sponsoredCapacityTransport = null;
+
     private ?ArrayUsageBuffer $billingBuffer = null;
 
     private ?ArrayReservationRegistry $billingRegistry = null;
@@ -79,6 +81,11 @@ trait InteractsWithBillingClient
     protected function managementTransport(): FakeManagementTransport
     {
         return $this->billingManagementTransport ??= new FakeManagementTransport;
+    }
+
+    protected function capacityTransport(): FakeSponsoredCapacityTransport
+    {
+        return $this->sponsoredCapacityTransport ??= new FakeSponsoredCapacityTransport;
     }
 
     protected function usageBuffer(): ArrayUsageBuffer
