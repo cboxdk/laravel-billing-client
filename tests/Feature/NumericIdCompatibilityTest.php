@@ -84,7 +84,8 @@ it('reads a refund held for approval with a numeric or public approval id', func
     expect(numericIdClient()->refundInvoice('org_1', 'INV-1', 'refund-1')->approvalId)->toBe($expected);
 })->with([
     'Billing before v2' => [42, '42'],
-    'Billing v2' => ['apr_3VbN7mQ2xLk9JhG4fD1sZa', 'apr_3VbN7mQ2xLk9JhG4fD1sZa'],
+    'Billing v2 before the apr rename' => ['apr_3VbN7mQ2xLk9JhG4fD1sZa', 'apr_3VbN7mQ2xLk9JhG4fD1sZa'],
+    'Billing v2' => ['blapr_3VbN7mQ2xLk9JhG4fD1sZa', 'blapr_3VbN7mQ2xLk9JhG4fD1sZa'],
 ]);
 
 it('reads limits and cancels a limit-increase request by a numeric id', function (): void {

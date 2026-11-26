@@ -6,6 +6,14 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+### Changed
+
+- Approval request ids are `blapr_…` (they were `apr_…`): Billing renamed the contested `apr`
+  prefix on 2026-11-26 and kept each id's 22 characters, so `apr_X` and `blapr_X` are the same
+  request. The client hands `InvoiceRefundResult::$approvalId` on as Billing sends it and needs no
+  change; an app that compares the prefix should accept both, and one that stores the id can
+  rewrite `apr_` to `blapr_` (Billing still accepts `apr_` for an overlap).
+
 ## [0.6.5] - 2026-11-25
 
 Subscribe for one thing inside an organization, and open a subscription that is first invoiced on

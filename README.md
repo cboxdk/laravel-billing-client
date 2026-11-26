@@ -33,7 +33,7 @@ Billing v2 serves its API on its own host and gives every object a public id.
   (with `Deprecation` headers).
 - **Ids are strings:** `IssuedInvoice::$id` (`inv_…`), `SubscriptionChange::$id` (`sub_…`),
   `LimitIncrease::$id` and `ResourceLimit::$grantRequestId` (`lir_…`) and
-  `InvoiceRefundResult::$approvalId` (`apr_…`). `cancelLimitIncrease()` takes the string id.
+  `InvoiceRefundResult::$approvalId` (`blapr_…`, `apr_…` before 2026-11-26). `cancelLimitIncrease()` takes the string id.
   Store them in string columns; Billing answers a numeric id with a 404.
 
 See the [changelog](CHANGELOG.md) for the full list.
