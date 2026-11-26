@@ -20,6 +20,7 @@ use Cbox\Billing\Client\Contracts\LocalLeaseStore;
 use Cbox\Billing\Client\Contracts\ManagementTransport;
 use Cbox\Billing\Client\Contracts\ReservationRegistry;
 use Cbox\Billing\Client\Contracts\ServiceAccessTransport;
+use Cbox\Billing\Client\Contracts\SponsoredCapacityTransport;
 use Cbox\Billing\Client\Contracts\UsageBuffer;
 use Cbox\Billing\Client\Enums\FailurePolicy;
 use Cbox\Billing\Client\Http\ApiUrl;
@@ -27,6 +28,7 @@ use Cbox\Billing\Client\Http\HttpBillingTransport;
 use Cbox\Billing\Client\Http\HttpDefinitionTransport;
 use Cbox\Billing\Client\Http\HttpManagementTransport;
 use Cbox\Billing\Client\Http\HttpServiceAccessTransport;
+use Cbox\Billing\Client\Http\HttpSponsoredCapacityTransport;
 use Cbox\Billing\Client\Jobs\RefillLease;
 use Cbox\Billing\Client\Kept\CacheKeptAnswers;
 use Cbox\Billing\Client\Kept\CurrentRequest;
@@ -66,6 +68,17 @@ class ClientServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/billing-client.php', 'billing-client');
 
+        $this->app->singleton(SponsoredCapacityTransport::class, static function (Application $app): HttpSponsoredCapacityTransport {
+            $config = $app->make(Config::class);
+
+            return new HttpSponsoredCapacityTransport(
+                $app->make(HttpFactory::class),
+                self::apiUrl($config),
+                self::stringConfig($config, 'billing-client.api_token', ''),
+                self::intConfig($config, 'billing-client.timeout', 5),
+                self::intConfig($config, 'billing-client.connect_timeout', 2),
+            );
+        });
         $this->app->singleton(DefinitionTransport::class, static function (Application $app): HttpDefinitionTransport {
             $config = $app->make(Config::class);
 
