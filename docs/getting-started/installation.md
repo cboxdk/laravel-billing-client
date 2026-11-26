@@ -55,7 +55,7 @@ provider, or use the fakes in tests.
 ## Upgrading to 0.6
 
 Billing v2 serves its API on its own host at `/v1` and gives every object that leaves it a
-public id: `{prefix}_` plus 22 base62 characters (`inv_…`, `sub_…`, `lir_…`, `apr_…`).
+public id: `{prefix}_` plus 22 base62 characters (`inv_…`, `sub_…`, `lir_…`, `blapr_…`).
 
 0.6 works against Billing before v2 too: an id sent as a number (`17`) arrives as the string
 `"17"`, and the old `BILLING_CLIENT_BASE_URL` keeps working. Upgrade the app first; Billing v2

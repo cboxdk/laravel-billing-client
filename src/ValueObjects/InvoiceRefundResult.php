@@ -6,7 +6,7 @@ namespace Cbox\Billing\Client\ValueObjects;
 
 /**
  * The answer to a refund: `status` is `refunded` (with `refundId`) or `pending_approval` (with
- * `approvalId`, the approval request's public id, `apr_…`).
+ * `approvalId`, the approval request's public id, `blapr_…`; `apr_…` before 2026-11-26).
  */
 readonly class InvoiceRefundResult
 {
