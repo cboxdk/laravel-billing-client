@@ -6,6 +6,22 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-27
+
+Read an organization's meter limits from Billing without waiting on it. Additive: nothing
+existing changes. It is a minor release, so bump the constraint to `^0.7` (or
+`^0.6 || ^0.7`); no code change is needed.
+
+### Added
+
+- `Kept\KeptEntitlements`: an organization's meter entitlements (`GET /entitlements/{org}`:
+  allowance, overage and weight per meter, plan and overrides applied) as a kept answer, so a
+  page that shows a limit, or a request that falls back to one, never waits on Billing.
+  `entitlements($org, acting:)`, `refresh()` and `forget()`, like `KeptFeatures`; a
+  `KeptChanges` mark about the organization or a plan asks again. An unlimited meter keeps its
+  null allowance. Use it instead of a plan copied into the app, which misses the organization's
+  overrides. Additive: nothing existing changes.
+
 ## [0.6.6] - 2026-11-26
 
 ### Added

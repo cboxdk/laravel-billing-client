@@ -52,6 +52,12 @@ without Billing, or to point the SDK at something else, bind your own implementa
 `Cbox\Billing\Client\Contracts\BillingTransport` (and `ManagementTransport`) in a service
 provider, or use the fakes in tests.
 
+## Upgrading to 0.7
+
+0.7 adds `KeptEntitlements` (an organization's meter limits, plan and overrides applied, as a
+kept answer) and changes nothing existing. Bump the constraint to
+`"cboxdk/laravel-billing-client": "^0.7"`; no code change is needed.
+
 ## Upgrading to 0.6
 
 Billing v2 serves its API on its own host at `/v1` and gives every object that leaves it a

@@ -17,6 +17,9 @@ Three readers are built on kept answers:
 - `ServiceAccess` answers the admission check: may this person use the service?
 - `KeptSubscriptions` reads an organization's subscription (plan, status, limits).
 - `KeptFeatures` reads an organization's features (plan grants and overrides).
+- `KeptEntitlements` reads an organization's meter entitlements: allowance, overage and
+  weight per meter, plan and overrides applied. Show and check limits against these, never
+  against a plan copied into the app, which misses the organization's overrides.
 
 All use the same rules, from `Cbox\Billing\Client\Contracts\KeptAnswers`.
 
