@@ -33,6 +33,7 @@ use Cbox\Billing\Client\Jobs\RefillLease;
 use Cbox\Billing\Client\Kept\CacheKeptAnswers;
 use Cbox\Billing\Client\Kept\CurrentRequest;
 use Cbox\Billing\Client\Kept\KeptChanges;
+use Cbox\Billing\Client\Kept\KeptEntitlements;
 use Cbox\Billing\Client\Kept\KeptFeatures;
 use Cbox\Billing\Client\Kept\KeptSubscriptions;
 use Cbox\Billing\Client\Leasing\LeaseManager;
@@ -167,6 +168,10 @@ class ClientServiceProvider extends ServiceProvider
         ));
 
         $this->app->singleton(KeptFeatures::class, static fn (Application $app): KeptFeatures => new KeptFeatures(
+            $app->make(KeptAnswers::class),
+        ));
+
+        $this->app->singleton(KeptEntitlements::class, static fn (Application $app): KeptEntitlements => new KeptEntitlements(
             $app->make(KeptAnswers::class),
         ));
     }
