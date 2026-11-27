@@ -6,6 +6,12 @@ release may change behaviour, and every such change is listed with an upgrade no
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-27
+
+Read an organization's meter limits from Billing without waiting on it. Additive: nothing
+existing changes. It is a minor release, so bump the constraint to `^0.7` (or
+`^0.6 || ^0.7`); no code change is needed.
+
 ### Added
 
 - `Kept\KeptEntitlements`: an organization's meter entitlements (`GET /entitlements/{org}`:
